@@ -10,8 +10,8 @@ permissions:
   contents: write
 
 jobs:
-  build:
-    name: Build and Package
+  build-release:
+    name: Build, Package, and Release
     runs-on: windows-latest
 
     steps:
@@ -43,6 +43,7 @@ jobs:
           $semver = $tag.TrimStart("v")
           "tag=$tag" >> $env:GITHUB_OUTPUT
           "semver=$semver" >> $env:GITHUB_OUTPUT
+          Write-Host "Next release tag: $tag"
 
       - name: Restore
         run: dotnet restore ClipSplitterApp.sln
@@ -50,14 +51,14 @@ jobs:
       - name: Build
         run: dotnet build ClipSplitterApp.sln --configuration Release --no-restore /p:Version=${{ steps.version.outputs.semver }}
 
-      - name: Publish Windows
+      - name: Publish
         run: dotnet publish ClipSplitterApp/ClipSplitterApp.csproj --configuration Release --runtime win-x64 --self-contained true --output artifacts/win-x64 /p:Version=${{ steps.version.outputs.semver }}
 
-      - name: Package Windows
+      - name: Package
         shell: pwsh
         run: Compress-Archive -Path artifacts/win-x64/* -DestinationPath ClipSplitter-${{ steps.version.outputs.tag }}-win-x64.zip -Force
 
-      - name: Upload package artifact
+      - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
           name: ClipSplitter-${{ steps.version.outputs.tag }}-win-x64
