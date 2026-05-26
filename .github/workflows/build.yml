@@ -1,14 +1,13 @@
-name: Build
+name: Build and Release
 
 on:
-  release:
-    types:
-      - created
-      - published
+  push:
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag to create or update, for example v1.0.0'
+        description: 'Optional release tag to use, for example v1.0.0. Leave empty to auto-increment.'
         required: false
         type: string
 
@@ -16,12 +15,55 @@ permissions:
   contents: write
 
 concurrency:
-  group: release-package-${{ github.event_name == 'release' && github.event.release.tag_name || github.ref }}
-  cancel-in-progress: true
+  group: build-release-main
+  cancel-in-progress: false
 
 jobs:
+  version:
+    name: Resolve Release Version
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      semver: ${{ steps.version.outputs.semver }}
+      package_tag: ${{ steps.version.outputs.package_tag }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve next version
+        id: version
+        shell: bash
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+        run: |
+          if [ -n "$INPUT_TAG" ]; then
+            tag="$INPUT_TAG"
+          else
+            latest_tag="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n 1)"
+            if [ -z "$latest_tag" ]; then
+              tag="v1.0.0"
+            else
+              version="${latest_tag#v}"
+              IFS='.' read -r major minor patch <<< "$version"
+              patch=$((patch + 1))
+              tag="v${major}.${minor}.${patch}"
+            fi
+          fi
+
+          semver="${tag#v}"
+          package_tag="$(echo "$tag" | sed 's/[^A-Za-z0-9._-]/-/g')"
+
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "semver=$semver" >> "$GITHUB_OUTPUT"
+          echo "package_tag=$package_tag" >> "$GITHUB_OUTPUT"
+          echo "Resolved release tag: $tag"
+
   publish:
     name: Publish ${{ matrix.name }}
+    needs: version
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -40,28 +82,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event_name == 'release' && github.event.release.tag_name || github.event_name == 'workflow_dispatch' && github.event.inputs.tag != '' && github.event.inputs.tag || github.ref }}
-
-      - name: Resolve package tag
-        id: package
-        shell: pwsh
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
-          INPUT_TAG: ${{ github.event.inputs.tag }}
-        run: |
-          if ($env:EVENT_NAME -eq "release" -and $env:RELEASE_TAG -ne "") {
-            $tag = $env:RELEASE_TAG
-          } elseif ($env:EVENT_NAME -eq "workflow_dispatch" -and $env:INPUT_TAG -ne "") {
-            $tag = $env:INPUT_TAG
-          } elseif ($env:GITHUB_REF -like "refs/tags/*") {
-            $tag = $env:GITHUB_REF_NAME
-          } else {
-            $tag = "dev"
-          }
-          $safeTag = $tag -replace '[^A-Za-z0-9._-]', '-'
-          "tag=$safeTag" >> $env:GITHUB_OUTPUT
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -72,28 +92,48 @@ jobs:
         run: dotnet restore ClipSplitterApp.sln
 
       - name: Build
-        run: dotnet build ClipSplitterApp.sln --configuration Release --no-restore
+        run: dotnet build ClipSplitterApp.sln --configuration Release --no-restore /p:Version=${{ needs.version.outputs.semver }}
 
       - name: Publish
-        run: dotnet publish ClipSplitterApp/ClipSplitterApp.csproj --configuration Release --runtime ${{ matrix.rid }} --self-contained true --output artifacts/${{ matrix.rid }}
+        run: dotnet publish ClipSplitterApp/ClipSplitterApp.csproj --configuration Release --runtime ${{ matrix.rid }} --self-contained true --output artifacts/${{ matrix.rid }} /p:Version=${{ needs.version.outputs.semver }}
 
       - name: Package
         shell: pwsh
-        run: Compress-Archive -Path artifacts/${{ matrix.rid }}/* -DestinationPath ClipSplitter-${{ steps.package.outputs.tag }}-${{ matrix.rid }}.zip
+        run: Compress-Archive -Path artifacts/${{ matrix.rid }}/* -DestinationPath ClipSplitter-${{ needs.version.outputs.package_tag }}-${{ matrix.rid }}.zip
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ClipSplitter-${{ steps.package.outputs.tag }}-${{ matrix.rid }}
-          path: ClipSplitter-${{ steps.package.outputs.tag }}-${{ matrix.rid }}.zip
+          name: ClipSplitter-${{ needs.version.outputs.package_tag }}-${{ matrix.rid }}
+          path: ClipSplitter-${{ needs.version.outputs.package_tag }}-${{ matrix.rid }}.zip
 
   release:
-    name: Upload GitHub Release Assets
-    needs: publish
+    name: Create GitHub Release
+    needs:
+      - version
+      - publish
     runs-on: ubuntu-latest
-    if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && github.event.inputs.tag != '')
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create tag
+        shell: bash
+        env:
+          TAG: ${{ needs.version.outputs.tag }}
+        run: |
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag "$TAG" "$GITHUB_SHA"
+            git push origin "$TAG"
+          fi
+
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
@@ -101,27 +141,11 @@ jobs:
           pattern: ClipSplitter-*
           merge-multiple: true
 
-      - name: Resolve release tag
-        id: release
-        shell: bash
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
-          INPUT_TAG: ${{ github.event.inputs.tag }}
-        run: |
-          if [ "$EVENT_NAME" = "release" ] && [ -n "$RELEASE_TAG" ]; then
-            echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
-          elif [ -n "$INPUT_TAG" ]; then
-            echo "tag=$INPUT_TAG" >> "$GITHUB_OUTPUT"
-          else
-            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Upload release assets
+      - name: Create release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.release.outputs.tag }}
-          name: ClipSplitter ${{ steps.release.outputs.tag }}
+          tag_name: ${{ needs.version.outputs.tag }}
+          name: ClipSplitter ${{ needs.version.outputs.tag }}
           files: release-artifacts/*.zip
           generate_release_notes: true
           overwrite_files: true
