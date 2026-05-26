@@ -1,25 +1,18 @@
 name: Build and Release
 
 on:
-  workflow_dispatch: {}
   push:
     branches:
       - main
+  workflow_dispatch:
 
 permissions:
   contents: write
 
-concurrency:
-  group: build-and-release-${{ github.run_id }}
-  cancel-in-progress: false
-
 jobs:
-  version:
-    name: Resolve Version
-    runs-on: ubuntu-latest
-    outputs:
-      tag: ${{ steps.version.outputs.tag }}
-      semver: ${{ steps.version.outputs.semver }}
+  build:
+    name: Build and Package
+    runs-on: windows-latest
 
     steps:
       - name: Checkout
@@ -27,97 +20,55 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Resolve next incremental tag
-        id: version
-        shell: bash
-        run: |
-          git fetch --tags --force
-
-          latest_tag="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n 1)"
-
-          if [ -z "$latest_tag" ]; then
-            tag="v1.0.0"
-          else
-            version="${latest_tag#v}"
-            IFS='.' read -r major minor patch <<< "$version"
-            patch=$((patch + 1))
-            tag="v${major}.${minor}.${patch}"
-          fi
-
-          semver="${tag#v}"
-
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          echo "semver=$semver" >> "$GITHUB_OUTPUT"
-          echo "Resolved release tag: $tag"
-
-  publish:
-    name: Publish ${{ matrix.name }}
-    needs: version
-    runs-on: ${{ matrix.os }}
-
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: Windows
-            os: windows-latest
-            rid: win-x64
-          - name: macOS
-            os: macos-latest
-            rid: osx-x64
-          - name: Linux
-            os: ubuntu-latest
-            rid: linux-x64
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
 
+      - name: Resolve next version
+        id: version
+        shell: pwsh
+        run: |
+          git fetch --tags --force
+          $latestTag = git tag --list "v[0-9]*.[0-9]*.[0-9]*" --sort=-v:refname | Select-Object -First 1
+
+          if ([string]::IsNullOrWhiteSpace($latestTag)) {
+            $tag = "v1.0.0"
+          } else {
+            $parts = $latestTag.TrimStart("v").Split(".")
+            $patch = [int]$parts[2] + 1
+            $tag = "v$($parts[0]).$($parts[1]).$patch"
+          }
+
+          $semver = $tag.TrimStart("v")
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "semver=$semver" >> $env:GITHUB_OUTPUT
+
       - name: Restore
         run: dotnet restore ClipSplitterApp.sln
 
       - name: Build
-        run: dotnet build ClipSplitterApp.sln --configuration Release --no-restore /p:Version=${{ needs.version.outputs.semver }}
+        run: dotnet build ClipSplitterApp.sln --configuration Release --no-restore /p:Version=${{ steps.version.outputs.semver }}
 
-      - name: Publish
-        run: dotnet publish ClipSplitterApp/ClipSplitterApp.csproj --configuration Release --runtime ${{ matrix.rid }} --self-contained true --output artifacts/${{ matrix.rid }} /p:Version=${{ needs.version.outputs.semver }}
+      - name: Publish Windows
+        run: dotnet publish ClipSplitterApp/ClipSplitterApp.csproj --configuration Release --runtime win-x64 --self-contained true --output artifacts/win-x64 /p:Version=${{ steps.version.outputs.semver }}
 
-      - name: Package
+      - name: Package Windows
         shell: pwsh
-        run: Compress-Archive -Path artifacts/${{ matrix.rid }}/* -DestinationPath ClipSplitter-${{ needs.version.outputs.tag }}-${{ matrix.rid }}.zip -Force
+        run: Compress-Archive -Path artifacts/win-x64/* -DestinationPath ClipSplitter-${{ steps.version.outputs.tag }}-win-x64.zip -Force
 
       - name: Upload package artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ClipSplitter-${{ needs.version.outputs.tag }}-${{ matrix.rid }}
-          path: ClipSplitter-${{ needs.version.outputs.tag }}-${{ matrix.rid }}.zip
-
-  release:
-    name: Create Tag and Release
-    needs:
-      - version
-      - publish
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Download package artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: release-artifacts
-          pattern: ClipSplitter-*
-          merge-multiple: true
+          name: ClipSplitter-${{ steps.version.outputs.tag }}-win-x64
+          path: ClipSplitter-${{ steps.version.outputs.tag }}-win-x64.zip
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ needs.version.outputs.tag }}
+          tag_name: ${{ steps.version.outputs.tag }}
           target_commitish: ${{ github.sha }}
-          name: ClipSplitter ${{ needs.version.outputs.tag }}
-          files: release-artifacts/*.zip
+          name: ClipSplitter ${{ steps.version.outputs.tag }}
+          files: ClipSplitter-${{ steps.version.outputs.tag }}-win-x64.zip
           generate_release_notes: true
           fail_on_unmatched_files: true
