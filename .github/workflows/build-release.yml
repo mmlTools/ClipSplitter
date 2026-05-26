@@ -2,9 +2,14 @@ name: Build and Release
 
 on:
   push:
-    branches:
-      - main
+    tags:
+      - 'v*'
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to package, for example v1.0.0'
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -18,6 +23,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
           token: ${{ github.token }}
           fetch-depth: 1
           persist-credentials: false
@@ -25,50 +31,26 @@ jobs:
       - name: Show .NET SDK
         run: dotnet --info
 
-      - name: Resolve next version
+      - name: Resolve release version
         id: version
         shell: pwsh
         env:
-          GH_TOKEN: ${{ github.token }}
-          OWNER: ${{ github.repository_owner }}
-          REPO: ${{ github.event.repository.name }}
+          INPUT_TAG: ${{ github.event.inputs.tag }}
         run: |
-          $headers = @{
-            Authorization = "Bearer $env:GH_TOKEN"
-            Accept = "application/vnd.github+json"
-            "X-GitHub-Api-Version" = "2022-11-28"
+          if (-not [string]::IsNullOrWhiteSpace($env:INPUT_TAG)) {
+            $tag = $env:INPUT_TAG
+          } else {
+            $tag = $env:GITHUB_REF_NAME
           }
 
-          $tags = Invoke-RestMethod `
-            -Method Get `
-            -Uri "https://api.github.com/repos/$env:OWNER/$env:REPO/tags?per_page=100" `
-            -Headers $headers
-
-          $latestTag = $tags |
-            Where-Object { $_.name -match '^v\d+\.\d+\.\d+$' } |
-            ForEach-Object {
-              $parts = $_.name.TrimStart("v").Split(".")
-              [pscustomobject]@{
-                Name = $_.name
-                Major = [int]$parts[0]
-                Minor = [int]$parts[1]
-                Patch = [int]$parts[2]
-              }
-            } |
-            Sort-Object Major, Minor, Patch -Descending |
-            Select-Object -First 1
-
-          if ([string]::IsNullOrWhiteSpace($latestTag)) {
-            $tag = "v1.0.0"
-          } else {
-            $patch = $latestTag.Patch + 1
-            $tag = "v$($latestTag.Major).$($latestTag.Minor).$patch"
+          if ($tag -notmatch '^v\d+\.\d+\.\d+$') {
+            throw "Release tag '$tag' must use vX.Y.Z format, for example v1.0.0."
           }
 
           $semver = $tag.TrimStart("v")
           "tag=$tag" >> $env:GITHUB_OUTPUT
           "semver=$semver" >> $env:GITHUB_OUTPUT
-          Write-Host "Next release tag: $tag"
+          Write-Host "Release tag: $tag"
 
       - name: Restore
         run: dotnet restore ClipSplitterApp.sln
