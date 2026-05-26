@@ -40,6 +40,13 @@
       <Setter Property="Height" Value="34" />
       <Setter Property="Padding" Value="12,0" />
     </Style>
+    <Style Selector="Button.support-button">
+      <Setter Property="Height" Value="32" />
+      <Setter Property="Padding" Value="12,0" />
+      <Setter Property="Background" Value="#1f2937" />
+      <Setter Property="BorderBrush" Value="#3b82f6" />
+      <Setter Property="BorderThickness" Value="1" />
+    </Style>
   </Window.Styles>
 
   <Grid Background="#0f1218">
@@ -65,10 +72,18 @@
       </Border>
 
       <Grid Grid.Row="1" RowDefinitions="Auto,*" Margin="24">
-        <StackPanel Spacing="8">
-          <TextBlock Text="Clip Splitter" FontSize="30" FontWeight="SemiBold" />
-          <TextBlock Text="Preview the generated cuts, choose the clips you want, then export only those segments." Opacity="0.75" />
-        </StackPanel>
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+          <StackPanel Spacing="8">
+            <TextBlock Text="Clip Splitter" FontSize="30" FontWeight="SemiBold" />
+            <TextBlock Text="Preview the generated cuts, choose the clips you want, then export only those segments." Opacity="0.75" />
+          </StackPanel>
+          <Button Grid.Column="1"
+                  Classes="support-button"
+                  Content="Support this project"
+                  Click="SupportProject_Click"
+                  VerticalAlignment="Top"
+                  ToolTip.Tip="Open PayPal support page" />
+        </Grid>
 
         <Border Grid.Row="1" Margin="0,22,0,0" Padding="20" CornerRadius="8" Background="#151922" BorderBrush="#2b3242" BorderThickness="1">
           <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,2*,Auto,*,Auto" ColumnDefinitions="*,Auto" RowSpacing="14" ColumnSpacing="12">
