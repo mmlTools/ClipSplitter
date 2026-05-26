@@ -1,12 +1,125 @@
-name: Push Test
+name: Build and Release
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
-  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    types: [closed]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-and-release-main
+  cancel-in-progress: true
 
 jobs:
-  test:
+  version:
+    name: Resolve Version
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      semver: ${{ steps.version.outputs.semver }}
+
     steps:
-      - run: echo "It works"
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve next incremental tag
+        id: version
+        shell: bash
+        run: |
+          git fetch --tags --force
+
+          latest_tag="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n 1)"
+
+          if [ -z "$latest_tag" ]; then
+            tag="v1.0.0"
+          else
+            version="${latest_tag#v}"
+            IFS='.' read -r major minor patch <<< "$version"
+            patch=$((patch + 1))
+            tag="v${major}.${minor}.${patch}"
+          fi
+
+          semver="${tag#v}"
+
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "semver=$semver" >> "$GITHUB_OUTPUT"
+          echo "Resolved release tag: $tag"
+
+  publish:
+    name: Publish ${{ matrix.name }}
+    needs: version
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            os: windows-latest
+            rid: win-x64
+          - name: macOS
+            os: macos-latest
+            rid: osx-x64
+          - name: Linux
+            os: ubuntu-latest
+            rid: linux-x64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore
+        run: dotnet restore ClipSplitterApp.sln
+
+      - name: Build
+        run: dotnet build ClipSplitterApp.sln --configuration Release --no-restore /p:Version=${{ needs.version.outputs.semver }}
+
+      - name: Publish
+        run: dotnet publish ClipSplitterApp/ClipSplitterApp.csproj --configuration Release --runtime ${{ matrix.rid }} --self-contained true --output artifacts/${{ matrix.rid }} /p:Version=${{ needs.version.outputs.semver }}
+
+      - name: Package
+        shell: pwsh
+        run: Compress-Archive -Path artifacts/${{ matrix.rid }}/* -DestinationPath ClipSplitter-${{ needs.version.outputs.tag }}-${{ matrix.rid }}.zip -Force
+
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ClipSplitter-${{ needs.version.outputs.tag }}-${{ matrix.rid }}
+          path: ClipSplitter-${{ needs.version.outputs.tag }}-${{ matrix.rid }}.zip
+
+  release:
+    name: Create Tag and Release
+    needs:
+      - version
+      - publish
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download package artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+          pattern: ClipSplitter-*
+          merge-multiple: true
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: ClipSplitter ${{ needs.version.outputs.tag }}
+          files: release-artifacts/*.zip
+          generate_release_notes: true
+          fail_on_unmatched_files: true
