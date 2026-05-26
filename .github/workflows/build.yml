@@ -6,7 +6,7 @@ on:
       - main
       - master
     tags:
-      - 'v*'
+      - '*'
   pull_request:
   workflow_dispatch:
     inputs:
@@ -39,6 +39,22 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag != '' && github.event.inputs.tag || github.ref }}
+
+      - name: Resolve package tag
+        id: package
+        shell: pwsh
+        run: |
+          if ("${{ github.event_name }}" -eq "workflow_dispatch" -and "${{ github.event.inputs.tag }}" -ne "") {
+            $tag = "${{ github.event.inputs.tag }}"
+          } elseif ($env:GITHUB_REF -like "refs/tags/*") {
+            $tag = $env:GITHUB_REF_NAME
+          } else {
+            $tag = "dev"
+          }
+          $safeTag = $tag -replace '[^A-Za-z0-9._-]', '-'
+          "tag=$safeTag" >> $env:GITHUB_OUTPUT
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -56,19 +72,19 @@ jobs:
 
       - name: Package
         shell: pwsh
-        run: Compress-Archive -Path artifacts/${{ matrix.rid }}/* -DestinationPath ClipSplitter-${{ matrix.rid }}.zip
+        run: Compress-Archive -Path artifacts/${{ matrix.rid }}/* -DestinationPath ClipSplitter-${{ steps.package.outputs.tag }}-${{ matrix.rid }}.zip
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ClipSplitter-${{ matrix.rid }}
-          path: ClipSplitter-${{ matrix.rid }}.zip
+          name: ClipSplitter-${{ steps.package.outputs.tag }}-${{ matrix.rid }}
+          path: ClipSplitter-${{ steps.package.outputs.tag }}-${{ matrix.rid }}.zip
 
   release:
     name: Create GitHub Release
     needs: publish
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && github.event.inputs.tag != '')
+    if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && github.event.inputs.tag != '')
 
     steps:
       - name: Download artifacts
@@ -97,3 +113,5 @@ jobs:
           name: ClipSplitter ${{ steps.release.outputs.tag }}
           files: release-artifacts/*.zip
           generate_release_notes: true
+          overwrite_files: true
+          fail_on_unmatched_files: true
