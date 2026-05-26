@@ -1,0 +1,51 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    name: Publish ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            os: windows-latest
+            rid: win-x64
+          - name: macOS
+            os: macos-latest
+            rid: osx-x64
+          - name: Linux
+            os: ubuntu-latest
+            rid: linux-x64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore
+        run: dotnet restore ClipSplitterApp.sln
+
+      - name: Build
+        run: dotnet build ClipSplitterApp.sln --configuration Release --no-restore
+
+      - name: Publish
+        run: dotnet publish ClipSplitterApp/ClipSplitterApp.csproj --configuration Release --runtime ${{ matrix.rid }} --self-contained true --output artifacts/${{ matrix.rid }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ClipSplitter-${{ matrix.rid }}
+          path: artifacts/${{ matrix.rid }}

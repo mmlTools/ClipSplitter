@@ -1,0 +1,152 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:views="clr-namespace:ClipSplitterApp.Views"
+        x:Class="ClipSplitterApp.Views.MainWindow"
+        x:DataType="views:MainWindow"
+        Title="Clip Splitter"
+        Width="980"
+        Height="700"
+        MinWidth="820"
+        MinHeight="600"
+        SystemDecorations="None"
+        ExtendClientAreaToDecorationsHint="True"
+        ExtendClientAreaChromeHints="NoChrome">
+  <Window.Styles>
+    <Style Selector="Button">
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.window-control">
+      <Setter Property="Width" Value="14" />
+      <Setter Property="Height" Value="14" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="CornerRadius" Value="7" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="FontSize" Value="0" />
+      <Setter Property="MinWidth" Value="14" />
+      <Setter Property="MinHeight" Value="14" />
+    </Style>
+    <Style Selector="Button.window-control.green">
+      <Setter Property="Background" Value="#34C759" />
+    </Style>
+    <Style Selector="Button.window-control.yellow">
+      <Setter Property="Background" Value="#FFCC00" />
+    </Style>
+    <Style Selector="Button.window-control.red">
+      <Setter Property="Background" Value="#FF453A" />
+    </Style>
+    <Style Selector="Button.action-button">
+      <Setter Property="MinWidth" Value="88" />
+      <Setter Property="Height" Value="34" />
+      <Setter Property="Padding" Value="12,0" />
+    </Style>
+  </Window.Styles>
+
+  <Grid Background="#0f1218">
+    <Grid RowDefinitions="48,*">
+      <Border x:Name="TitleBar"
+              Background="#10141c"
+              BorderBrush="#263040"
+              BorderThickness="0,0,0,1"
+              PointerPressed="TitleBar_PointerPressed">
+        <Grid ColumnDefinitions="Auto,*,Auto" Margin="12,0">
+          <TextBlock Grid.Column="1"
+                     Text="Clip Splitter"
+                     HorizontalAlignment="Center"
+                     VerticalAlignment="Center"
+                     FontWeight="SemiBold" />
+
+          <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+            <Button Classes="window-control green" Content="" Click="MaximizeRestore_Click" ToolTip.Tip="Maximize or restore" />
+            <Button Classes="window-control yellow" Content="" Click="Minimize_Click" ToolTip.Tip="Minimize" />
+            <Button Classes="window-control red" Content="" Click="Close_Click" ToolTip.Tip="Close" />
+          </StackPanel>
+        </Grid>
+      </Border>
+
+      <Grid Grid.Row="1" RowDefinitions="Auto,*" Margin="24">
+        <StackPanel Spacing="8">
+          <TextBlock Text="Clip Splitter" FontSize="30" FontWeight="SemiBold" />
+          <TextBlock Text="Preview the generated cuts, choose the clips you want, then export only those segments." Opacity="0.75" />
+        </StackPanel>
+
+        <Border Grid.Row="1" Margin="0,22,0,0" Padding="20" CornerRadius="8" Background="#151922" BorderBrush="#2b3242" BorderThickness="1">
+          <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,2*,Auto,*,Auto" ColumnDefinitions="*,Auto" RowSpacing="14" ColumnSpacing="12">
+            <TextBlock Grid.Row="0" Grid.ColumnSpan="2" Text="Input clip" FontWeight="SemiBold" />
+            <TextBox Grid.Row="1" Grid.Column="0" x:Name="InputPathBox" Watermark="Select a video file..." IsReadOnly="True" />
+            <Button Grid.Row="1" Grid.Column="1" Classes="action-button" Content="Browse clip" Click="BrowseInput_Click" />
+
+            <TextBlock Grid.Row="2" Grid.ColumnSpan="2" Text="Output folder" FontWeight="SemiBold" />
+            <TextBox Grid.Row="3" Grid.Column="0" x:Name="OutputPathBox" Watermark="Select output folder..." IsReadOnly="True" />
+            <Button Grid.Row="3" Grid.Column="1" Classes="action-button" Content="Browse folder" Click="BrowseOutput_Click" />
+
+            <Grid Grid.Row="4" Grid.ColumnSpan="2" ColumnDefinitions="Auto,120,Auto,*,Auto" ColumnSpacing="12" VerticalAlignment="Center">
+              <TextBlock Text="Split every" VerticalAlignment="Center" />
+              <NumericUpDown Grid.Column="1"
+                             x:Name="SegmentSecondsBox"
+                             Minimum="1"
+                             Maximum="86400"
+                             Value="30"
+                             Increment="1"
+                             ValueChanged="SegmentSecondsBox_ValueChanged" />
+              <TextBlock Grid.Column="2" Text="seconds" VerticalAlignment="Center" />
+              <CheckBox Grid.Column="3" x:Name="ReencodeCheckBox" Content="Re-encode for exact cuts" VerticalAlignment="Center" />
+              <Button Grid.Column="4" x:Name="SplitButton" Classes="accent action-button" Content="Export selected" Click="Split_Click" />
+            </Grid>
+
+            <Grid Grid.Row="5" Grid.ColumnSpan="2" RowDefinitions="Auto,*" RowSpacing="10">
+              <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="8">
+                <TextBlock Text="Cut preview" FontWeight="SemiBold" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1" x:Name="PreviewSummaryText" Opacity="0.65" VerticalAlignment="Center" />
+                <Button Grid.Column="2" Classes="action-button" Content="Select all" Click="SelectAll_Click" />
+                <Button Grid.Column="3" Classes="action-button" Content="Clear" Click="ClearSelection_Click" />
+              </Grid>
+
+              <ListBox Grid.Row="1"
+                       x:Name="PreviewList"
+                       ItemsSource="{Binding PreviewItems}"
+                       Background="#10141c"
+                       BorderBrush="#2b3242"
+                       BorderThickness="1"
+                       CornerRadius="6"
+                       ScrollViewer.VerticalScrollBarVisibility="Auto">
+                <ListBox.ItemTemplate>
+                  <DataTemplate x:DataType="views:ClipPreviewItem">
+                    <Grid ColumnDefinitions="Auto,80,*,90,180" ColumnSpacing="12" Margin="8,6">
+                      <CheckBox IsChecked="{Binding IsSelected}" VerticalAlignment="Center" />
+                      <TextBlock Grid.Column="1" Text="{Binding Label}" VerticalAlignment="Center" FontWeight="SemiBold" />
+                      <TextBlock Grid.Column="2" Text="{Binding TimeRange}" VerticalAlignment="Center" />
+                      <TextBlock Grid.Column="3" Text="{Binding Duration}" VerticalAlignment="Center" Opacity="0.75" />
+                      <TextBlock Grid.Column="4" Text="{Binding FileName}" VerticalAlignment="Center" Opacity="0.65" TextTrimming="CharacterEllipsis" />
+                    </Grid>
+                  </DataTemplate>
+                </ListBox.ItemTemplate>
+              </ListBox>
+            </Grid>
+
+            <ProgressBar Grid.Row="6" Grid.ColumnSpan="2" x:Name="ProgressBar" Minimum="0" Maximum="100" Height="14" />
+
+            <TextBox Grid.Row="7"
+                     Grid.ColumnSpan="2"
+                     x:Name="LogBox"
+                     IsReadOnly="True"
+                     AcceptsReturn="True"
+                     TextWrapping="Wrap"
+                     ScrollViewer.VerticalScrollBarVisibility="Auto" />
+
+            <TextBlock Grid.Row="8" Grid.ColumnSpan="2" Opacity="0.65" Text="Requires ffmpeg and ffprobe in PATH, or in a local tools/ffmpeg folder beside the executable." />
+          </Grid>
+        </Border>
+      </Grid>
+    </Grid>
+
+    <Border Background="Transparent" Height="6" VerticalAlignment="Top" PointerPressed="ResizeTop_PointerPressed" />
+    <Border Background="Transparent" Height="6" VerticalAlignment="Bottom" PointerPressed="ResizeBottom_PointerPressed" />
+    <Border Background="Transparent" Width="6" HorizontalAlignment="Left" PointerPressed="ResizeLeft_PointerPressed" />
+    <Border Background="Transparent" Width="6" HorizontalAlignment="Right" PointerPressed="ResizeRight_PointerPressed" />
+    <Border Background="Transparent" Width="12" Height="12" HorizontalAlignment="Left" VerticalAlignment="Top" PointerPressed="ResizeTopLeft_PointerPressed" />
+    <Border Background="Transparent" Width="12" Height="12" HorizontalAlignment="Right" VerticalAlignment="Top" PointerPressed="ResizeTopRight_PointerPressed" />
+    <Border Background="Transparent" Width="12" Height="12" HorizontalAlignment="Left" VerticalAlignment="Bottom" PointerPressed="ResizeBottomLeft_PointerPressed" />
+    <Border Background="Transparent" Width="12" Height="12" HorizontalAlignment="Right" VerticalAlignment="Bottom" PointerPressed="ResizeBottomRight_PointerPressed" />
+  </Grid>
+</Window>
