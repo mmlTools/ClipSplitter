@@ -1,19 +1,17 @@
 name: Build and Release
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: {}
   push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-    types: [closed]
+    branches:
+      - main
 
 permissions:
   contents: write
 
 concurrency:
-  group: build-and-release-main
-  cancel-in-progress: true
+  group: build-and-release-${{ github.run_id }}
+  cancel-in-progress: false
 
 jobs:
   version:
