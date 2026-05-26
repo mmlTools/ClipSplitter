@@ -2,21 +2,14 @@ name: Build and Release
 
 on:
   push:
-    branches:
-      - main
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: "Optional tag to release, for example v1.0.0. Leave empty to auto-increment."
-        required: false
-        type: string
+    branches: [main]
 
 permissions:
   contents: write
 
 concurrency:
   group: build-and-release-main
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   version:
@@ -25,47 +18,41 @@ jobs:
     outputs:
       tag: ${{ steps.version.outputs.tag }}
       semver: ${{ steps.version.outputs.semver }}
-      package_tag: ${{ steps.version.outputs.package_tag }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          fetch-tags: true
 
-      - name: Resolve next tag
+      - name: Resolve next incremental tag
         id: version
         shell: bash
-        env:
-          INPUT_TAG: ${{ github.event.inputs.tag }}
         run: |
-          if [ -n "$INPUT_TAG" ]; then
-            tag="$INPUT_TAG"
+          git fetch --tags --force
+
+          latest_tag="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n 1)"
+
+          if [ -z "$latest_tag" ]; then
+            tag="v1.0.0"
           else
-            latest_tag="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n 1)"
-            if [ -z "$latest_tag" ]; then
-              tag="v1.0.0"
-            else
-              version="${latest_tag#v}"
-              IFS='.' read -r major minor patch <<< "$version"
-              patch=$((patch + 1))
-              tag="v${major}.${minor}.${patch}"
-            fi
+            version="${latest_tag#v}"
+            IFS='.' read -r major minor patch <<< "$version"
+            patch=$((patch + 1))
+            tag="v${major}.${minor}.${patch}"
           fi
 
           semver="${tag#v}"
-          package_tag="$(echo "$tag" | sed 's/[^A-Za-z0-9._-]/-/g')"
 
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "semver=$semver" >> "$GITHUB_OUTPUT"
-          echo "package_tag=$package_tag" >> "$GITHUB_OUTPUT"
-          echo "Release tag: $tag"
+          echo "Resolved release tag: $tag"
 
   publish:
     name: Publish ${{ matrix.name }}
     needs: version
     runs-on: ${{ matrix.os }}
+
     strategy:
       fail-fast: false
       matrix:
@@ -100,13 +87,13 @@ jobs:
 
       - name: Package
         shell: pwsh
-        run: Compress-Archive -Path artifacts/${{ matrix.rid }}/* -DestinationPath ClipSplitter-${{ needs.version.outputs.package_tag }}-${{ matrix.rid }}.zip
+        run: Compress-Archive -Path artifacts/${{ matrix.rid }}/* -DestinationPath ClipSplitter-${{ needs.version.outputs.tag }}-${{ matrix.rid }}.zip -Force
 
       - name: Upload package artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ClipSplitter-${{ needs.version.outputs.package_tag }}-${{ matrix.rid }}
-          path: ClipSplitter-${{ needs.version.outputs.package_tag }}-${{ matrix.rid }}.zip
+          name: ClipSplitter-${{ needs.version.outputs.tag }}-${{ matrix.rid }}
+          path: ClipSplitter-${{ needs.version.outputs.tag }}-${{ matrix.rid }}.zip
 
   release:
     name: Create Tag and Release
@@ -131,5 +118,4 @@ jobs:
           name: ClipSplitter ${{ needs.version.outputs.tag }}
           files: release-artifacts/*.zip
           generate_release_notes: true
-          overwrite_files: true
           fail_on_unmatched_files: true

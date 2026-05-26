@@ -2,7 +2,7 @@ using System;
 using Avalonia;
 
 namespace ClipSplitterApp;
-// testing build workflow
+
 internal static class Program
 {
     [STAThread]
