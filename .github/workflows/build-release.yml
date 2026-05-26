@@ -56,18 +56,49 @@ jobs:
         shell: pwsh
         run: Compress-Archive -Path artifacts/win-x64/* -DestinationPath ClipSplitter-${{ steps.version.outputs.tag }}-win-x64.zip -Force
 
-      - name: Upload workflow artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ClipSplitter-${{ steps.version.outputs.tag }}-win-x64
-          path: ClipSplitter-${{ steps.version.outputs.tag }}-win-x64.zip
-
       - name: Create GitHub release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.version.outputs.tag }}
-          target_commitish: ${{ github.sha }}
-          name: ClipSplitter ${{ steps.version.outputs.tag }}
-          files: ClipSplitter-${{ steps.version.outputs.tag }}-win-x64.zip
-          generate_release_notes: true
-          fail_on_unmatched_files: true
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.event.repository.name }}
+          TAG: ${{ steps.version.outputs.tag }}
+          SHA: ${{ github.sha }}
+          ZIP_PATH: ClipSplitter-${{ steps.version.outputs.tag }}-win-x64.zip
+        run: |
+          $headers = @{
+            Authorization = "Bearer $env:GH_TOKEN"
+            Accept = "application/vnd.github+json"
+            "X-GitHub-Api-Version" = "2022-11-28"
+          }
+
+          $releaseBody = @{
+            tag_name = $env:TAG
+            target_commitish = $env:SHA
+            name = "ClipSplitter $env:TAG"
+            body = "Automated ClipSplitter build for $env:TAG."
+            draft = $false
+            prerelease = $false
+            generate_release_notes = $true
+          } | ConvertTo-Json
+
+          $release = Invoke-RestMethod `
+            -Method Post `
+            -Uri "https://api.github.com/repos/$env:OWNER/$env:REPO/releases" `
+            -Headers $headers `
+            -ContentType "application/json" `
+            -Body $releaseBody
+
+          $uploadHeaders = @{
+            Authorization = "Bearer $env:GH_TOKEN"
+            Accept = "application/vnd.github+json"
+            "X-GitHub-Api-Version" = "2022-11-28"
+            "Content-Type" = "application/zip"
+          }
+
+          $uploadUri = "https://uploads.github.com/repos/$env:OWNER/$env:REPO/releases/$($release.id)/assets?name=$env:ZIP_PATH"
+          Invoke-RestMethod `
+            -Method Post `
+            -Uri $uploadUri `
+            -Headers $uploadHeaders `
+            -InFile $env:ZIP_PATH
