@@ -8,13 +8,6 @@ on:
     branches: [main]
     types: [closed]
 
-permissions:
-  contents: write
-
-concurrency:
-  group: build-and-release-main
-  cancel-in-progress: true
-
 jobs:
   version:
     name: Resolve Version
