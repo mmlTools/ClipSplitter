@@ -20,10 +20,8 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: 8.0.x
+      - name: Show .NET SDK
+        run: dotnet --info
 
       - name: Resolve next version
         id: version
