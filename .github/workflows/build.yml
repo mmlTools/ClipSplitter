@@ -5,8 +5,18 @@ on:
     branches:
       - main
       - master
+    tags:
+      - 'v*'
   pull_request:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to create or update, for example v1.0.0'
+        required: false
+        type: string
+
+permissions:
+  contents: write
 
 jobs:
   publish:
@@ -44,8 +54,46 @@ jobs:
       - name: Publish
         run: dotnet publish ClipSplitterApp/ClipSplitterApp.csproj --configuration Release --runtime ${{ matrix.rid }} --self-contained true --output artifacts/${{ matrix.rid }}
 
+      - name: Package
+        shell: pwsh
+        run: Compress-Archive -Path artifacts/${{ matrix.rid }}/* -DestinationPath ClipSplitter-${{ matrix.rid }}.zip
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ClipSplitter-${{ matrix.rid }}
-          path: artifacts/${{ matrix.rid }}
+          path: ClipSplitter-${{ matrix.rid }}.zip
+
+  release:
+    name: Create GitHub Release
+    needs: publish
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && github.event.inputs.tag != '')
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+          pattern: ClipSplitter-*
+          merge-multiple: true
+
+      - name: Resolve release tag
+        id: release
+        shell: bash
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+        run: |
+          if [ -n "$INPUT_TAG" ]; then
+            echo "tag=$INPUT_TAG" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release.outputs.tag }}
+          name: ClipSplitter ${{ steps.release.outputs.tag }}
+          files: release-artifacts/*.zip
+          generate_release_notes: true
