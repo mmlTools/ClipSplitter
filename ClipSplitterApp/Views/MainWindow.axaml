@@ -15,37 +15,98 @@
     <Style Selector="Button">
       <Setter Property="HorizontalContentAlignment" Value="Center" />
       <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="Background" Value="#202735" />
+      <Setter Property="Foreground" Value="#eef2f7" />
+      <Setter Property="BorderBrush" Value="#334155" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="Button:pointerover">
+      <Setter Property="Background" Value="#283244" />
+      <Setter Property="BorderBrush" Value="#4b5f7a" />
+    </Style>
+    <Style Selector="Button:pressed">
+      <Setter Property="Background" Value="#18202d" />
+      <Setter Property="BorderBrush" Value="#64748b" />
+    </Style>
+    <Style Selector="Button:disabled">
+      <Setter Property="Cursor" Value="Arrow" />
+      <Setter Property="Opacity" Value="0.55" />
+    </Style>
+    <Style Selector="TextBox, NumericUpDown">
+      <Setter Property="Background" Value="#10141c" />
+      <Setter Property="Foreground" Value="#edf2f7" />
+      <Setter Property="BorderBrush" Value="#2f394a" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="6" />
+    </Style>
+    <Style Selector="TextBox:pointerover, NumericUpDown:pointerover">
+      <Setter Property="BorderBrush" Value="#46566f" />
+    </Style>
+    <Style Selector="TextBox:focus, NumericUpDown:focus">
+      <Setter Property="BorderBrush" Value="#3b82f6" />
     </Style>
     <Style Selector="Button.window-control">
-      <Setter Property="Width" Value="14" />
-      <Setter Property="Height" Value="14" />
+      <Setter Property="Width" Value="34" />
+      <Setter Property="Height" Value="30" />
       <Setter Property="Padding" Value="0" />
-      <Setter Property="CornerRadius" Value="7" />
+      <Setter Property="CornerRadius" Value="5" />
       <Setter Property="BorderThickness" Value="0" />
-      <Setter Property="FontSize" Value="0" />
-      <Setter Property="MinWidth" Value="14" />
-      <Setter Property="MinHeight" Value="14" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="#aeb8c7" />
+      <Setter Property="FontSize" Value="14" />
+      <Setter Property="MinWidth" Value="34" />
+      <Setter Property="MinHeight" Value="30" />
     </Style>
-    <Style Selector="Button.window-control.green">
-      <Setter Property="Background" Value="#34C759" />
+    <Style Selector="Button.window-control:pointerover">
+      <Setter Property="Background" Value="#232b39" />
+      <Setter Property="Foreground" Value="#ffffff" />
     </Style>
-    <Style Selector="Button.window-control.yellow">
-      <Setter Property="Background" Value="#FFCC00" />
-    </Style>
-    <Style Selector="Button.window-control.red">
-      <Setter Property="Background" Value="#FF453A" />
+    <Style Selector="Button.window-control.close:pointerover">
+      <Setter Property="Background" Value="#b91c1c" />
+      <Setter Property="Foreground" Value="#ffffff" />
     </Style>
     <Style Selector="Button.action-button">
-      <Setter Property="MinWidth" Value="88" />
+      <Setter Property="Width" Value="132" />
+      <Setter Property="MinWidth" Value="132" />
       <Setter Property="Height" Value="34" />
       <Setter Property="Padding" Value="12,0" />
+    </Style>
+    <Style Selector="Button.preview-button">
+      <Setter Property="Width" Value="88" />
+      <Setter Property="MinWidth" Value="88" />
+      <Setter Property="Height" Value="30" />
+      <Setter Property="Padding" Value="10,0" />
     </Style>
     <Style Selector="Button.support-button">
       <Setter Property="Height" Value="32" />
       <Setter Property="Padding" Value="12,0" />
-      <Setter Property="Background" Value="#1f2937" />
+      <Setter Property="Background" Value="#172033" />
       <Setter Property="BorderBrush" Value="#3b82f6" />
       <Setter Property="BorderThickness" Value="1" />
+    </Style>
+    <Style Selector="Button.accent">
+      <Setter Property="Background" Value="#2563eb" />
+      <Setter Property="BorderBrush" Value="#3b82f6" />
+      <Setter Property="Foreground" Value="#ffffff" />
+    </Style>
+    <Style Selector="Button.accent:pointerover">
+      <Setter Property="Background" Value="#1d4ed8" />
+      <Setter Property="BorderBrush" Value="#60a5fa" />
+    </Style>
+    <Style Selector="Border.resize-horizontal">
+      <Setter Property="Cursor" Value="SizeWestEast" />
+    </Style>
+    <Style Selector="Border.resize-vertical">
+      <Setter Property="Cursor" Value="SizeNorthSouth" />
+    </Style>
+    <Style Selector="Border.resize-nwse">
+      <Setter Property="Cursor" Value="TopLeftCorner" />
+    </Style>
+    <Style Selector="Border.resize-nesw">
+      <Setter Property="Cursor" Value="TopRightCorner" />
     </Style>
   </Window.Styles>
 
@@ -63,10 +124,10 @@
                      VerticalAlignment="Center"
                      FontWeight="SemiBold" />
 
-          <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-            <Button Classes="window-control green" Content="" Click="MaximizeRestore_Click" ToolTip.Tip="Maximize or restore" />
-            <Button Classes="window-control yellow" Content="" Click="Minimize_Click" ToolTip.Tip="Minimize" />
-            <Button Classes="window-control red" Content="" Click="Close_Click" ToolTip.Tip="Close" />
+          <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
+            <Button Classes="window-control" Content="-" Click="Minimize_Click" ToolTip.Tip="Minimize" />
+            <Button Classes="window-control" Content="□" Click="MaximizeRestore_Click" ToolTip.Tip="Maximize or restore" />
+            <Button Classes="window-control close" Content="×" Click="Close_Click" ToolTip.Tip="Close" />
           </StackPanel>
         </Grid>
       </Border>
@@ -89,11 +150,11 @@
           <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,2*,Auto,*,Auto" ColumnDefinitions="*,Auto" RowSpacing="14" ColumnSpacing="12">
             <TextBlock Grid.Row="0" Grid.ColumnSpan="2" Text="Input clip" FontWeight="SemiBold" />
             <TextBox Grid.Row="1" Grid.Column="0" x:Name="InputPathBox" Watermark="Select a video file..." IsReadOnly="True" />
-            <Button Grid.Row="1" Grid.Column="1" Classes="action-button" Content="Browse clip" Click="BrowseInput_Click" />
+            <Button Grid.Row="1" Grid.Column="1" x:Name="BrowseInputButton" Classes="action-button" Content="Browse clip" Click="BrowseInput_Click" />
 
             <TextBlock Grid.Row="2" Grid.ColumnSpan="2" Text="Output folder" FontWeight="SemiBold" />
             <TextBox Grid.Row="3" Grid.Column="0" x:Name="OutputPathBox" Watermark="Select output folder..." IsReadOnly="True" />
-            <Button Grid.Row="3" Grid.Column="1" Classes="action-button" Content="Browse folder" Click="BrowseOutput_Click" />
+            <Button Grid.Row="3" Grid.Column="1" x:Name="BrowseOutputButton" Classes="action-button" Content="Browse folder" Click="BrowseOutput_Click" />
 
             <Grid Grid.Row="4" Grid.ColumnSpan="2" ColumnDefinitions="Auto,120,Auto,*,Auto" ColumnSpacing="12" VerticalAlignment="Center">
               <TextBlock Text="Split every" VerticalAlignment="Center" />
@@ -113,8 +174,8 @@
               <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="8">
                 <TextBlock Text="Cut preview" FontWeight="SemiBold" VerticalAlignment="Center" />
                 <TextBlock Grid.Column="1" x:Name="PreviewSummaryText" Opacity="0.65" VerticalAlignment="Center" />
-                <Button Grid.Column="2" Classes="action-button" Content="Select all" Click="SelectAll_Click" />
-                <Button Grid.Column="3" Classes="action-button" Content="Clear" Click="ClearSelection_Click" />
+                <Button Grid.Column="2" x:Name="SelectAllButton" Classes="action-button" Content="Select all" Click="SelectAll_Click" />
+                <Button Grid.Column="3" x:Name="ClearSelectionButton" Classes="action-button" Content="Clear" Click="ClearSelection_Click" />
               </Grid>
 
               <ListBox Grid.Row="1"
@@ -127,12 +188,28 @@
                        ScrollViewer.VerticalScrollBarVisibility="Auto">
                 <ListBox.ItemTemplate>
                   <DataTemplate x:DataType="views:ClipPreviewItem">
-                    <Grid ColumnDefinitions="Auto,80,*,90,180" ColumnSpacing="12" Margin="8,6">
+                    <Grid ColumnDefinitions="Auto,96,80,*,90,160,88" ColumnSpacing="12" Margin="8,6">
                       <CheckBox IsChecked="{Binding IsSelected}" VerticalAlignment="Center" />
-                      <TextBlock Grid.Column="1" Text="{Binding Label}" VerticalAlignment="Center" FontWeight="SemiBold" />
-                      <TextBlock Grid.Column="2" Text="{Binding TimeRange}" VerticalAlignment="Center" />
-                      <TextBlock Grid.Column="3" Text="{Binding Duration}" VerticalAlignment="Center" Opacity="0.75" />
-                      <TextBlock Grid.Column="4" Text="{Binding FileName}" VerticalAlignment="Center" Opacity="0.65" TextTrimming="CharacterEllipsis" />
+                      <Border Grid.Column="1"
+                              Width="96"
+                              Height="54"
+                              Background="#0b0f16"
+                              BorderBrush="#2f394a"
+                              BorderThickness="1"
+                              CornerRadius="5"
+                              ClipToBounds="True">
+                        <Image Source="{Binding Thumbnail}" Stretch="UniformToFill" />
+                      </Border>
+                      <TextBlock Grid.Column="2" Text="{Binding Label}" VerticalAlignment="Center" FontWeight="SemiBold" />
+                      <TextBlock Grid.Column="3" Text="{Binding TimeRange}" VerticalAlignment="Center" />
+                      <TextBlock Grid.Column="4" Text="{Binding Duration}" VerticalAlignment="Center" Opacity="0.75" />
+                      <TextBlock Grid.Column="5" Text="{Binding FileName}" VerticalAlignment="Center" Opacity="0.65" TextTrimming="CharacterEllipsis" />
+                      <Button Grid.Column="6"
+                              Classes="preview-button"
+                              Content="{Binding PreviewButtonText}"
+                              IsEnabled="{Binding CanPreview}"
+                              Click="PreviewClip_Click"
+                              VerticalAlignment="Center" />
                     </Grid>
                   </DataTemplate>
                 </ListBox.ItemTemplate>
@@ -155,13 +232,13 @@
       </Grid>
     </Grid>
 
-    <Border Background="Transparent" Height="6" VerticalAlignment="Top" PointerPressed="ResizeTop_PointerPressed" />
-    <Border Background="Transparent" Height="6" VerticalAlignment="Bottom" PointerPressed="ResizeBottom_PointerPressed" />
-    <Border Background="Transparent" Width="6" HorizontalAlignment="Left" PointerPressed="ResizeLeft_PointerPressed" />
-    <Border Background="Transparent" Width="6" HorizontalAlignment="Right" PointerPressed="ResizeRight_PointerPressed" />
-    <Border Background="Transparent" Width="12" Height="12" HorizontalAlignment="Left" VerticalAlignment="Top" PointerPressed="ResizeTopLeft_PointerPressed" />
-    <Border Background="Transparent" Width="12" Height="12" HorizontalAlignment="Right" VerticalAlignment="Top" PointerPressed="ResizeTopRight_PointerPressed" />
-    <Border Background="Transparent" Width="12" Height="12" HorizontalAlignment="Left" VerticalAlignment="Bottom" PointerPressed="ResizeBottomLeft_PointerPressed" />
-    <Border Background="Transparent" Width="12" Height="12" HorizontalAlignment="Right" VerticalAlignment="Bottom" PointerPressed="ResizeBottomRight_PointerPressed" />
+    <Border Classes="resize-vertical" Background="Transparent" Height="8" VerticalAlignment="Top" PointerPressed="ResizeTop_PointerPressed" />
+    <Border Classes="resize-vertical" Background="Transparent" Height="8" VerticalAlignment="Bottom" PointerPressed="ResizeBottom_PointerPressed" />
+    <Border Classes="resize-horizontal" Background="Transparent" Width="8" HorizontalAlignment="Left" PointerPressed="ResizeLeft_PointerPressed" />
+    <Border Classes="resize-horizontal" Background="Transparent" Width="8" HorizontalAlignment="Right" PointerPressed="ResizeRight_PointerPressed" />
+    <Border Classes="resize-nwse" Background="Transparent" Width="18" Height="18" HorizontalAlignment="Left" VerticalAlignment="Top" PointerPressed="ResizeTopLeft_PointerPressed" />
+    <Border Classes="resize-nesw" Background="Transparent" Width="18" Height="18" HorizontalAlignment="Right" VerticalAlignment="Top" PointerPressed="ResizeTopRight_PointerPressed" />
+    <Border Classes="resize-nesw" Background="Transparent" Width="18" Height="18" HorizontalAlignment="Left" VerticalAlignment="Bottom" PointerPressed="ResizeBottomLeft_PointerPressed" />
+    <Border Classes="resize-nwse" Background="Transparent" Width="18" Height="18" HorizontalAlignment="Right" VerticalAlignment="Bottom" PointerPressed="ResizeBottomRight_PointerPressed" />
   </Grid>
 </Window>

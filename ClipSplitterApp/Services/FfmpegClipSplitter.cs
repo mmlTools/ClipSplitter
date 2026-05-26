@@ -68,6 +68,23 @@ public sealed class FfmpegClipSplitter
         }
     }
 
+    public async Task CreateThumbnailAsync(string inputFile, ClipSegment segment, string outputFile, CancellationToken token)
+    {
+        var ffmpeg = FindTool("ffmpeg");
+        Directory.CreateDirectory(Path.GetDirectoryName(outputFile) ?? AppContext.BaseDirectory);
+
+        var offset = segment.Start + TimeSpan.FromTicks(segment.Length.Ticks / 2);
+        var args = $"-y -ss {FormatArgTime(offset)} -i {Quote(inputFile)} -frames:v 1 -vf scale=112:-1:force_original_aspect_ratio=decrease {Quote(outputFile)}";
+        await RunProcessCaptureAsync(ffmpeg, args, token);
+    }
+
+    public async Task CreatePreviewClipAsync(string inputFile, ClipSegment segment, string outputFile, CancellationToken token)
+    {
+        var ffmpeg = FindTool("ffmpeg");
+        Directory.CreateDirectory(Path.GetDirectoryName(outputFile) ?? AppContext.BaseDirectory);
+        await RunFfmpegSegmentAsync(ffmpeg, inputFile, outputFile, segment.Start, segment.Length, true, token);
+    }
+
     private static async Task<TimeSpan> GetDurationAsync(string ffprobe, string inputFile, CancellationToken token)
     {
         var args = $"-v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 {Quote(inputFile)}";
