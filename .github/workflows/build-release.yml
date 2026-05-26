@@ -1,113 +1,93 @@
-name: Build and Release
+name: Build and Attach to Release
 
 on:
-  push:
-    tags:
-      - 'v*'
+  release:
+    types: [published]
   workflow_dispatch:
-    inputs:
-      tag:
-        description: 'Existing tag to package, for example v1.0.0'
-        required: true
-        type: string
 
 permissions:
   contents: write
 
 jobs:
   build-release:
-    name: Build, Package, and Release
-    runs-on: windows-latest
+    name: Build ${{ matrix.runtime }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            runtime: win-x64
+            archive: zip
+
+          - os: ubuntu-latest
+            runtime: linux-x64
+            archive: tar.gz
+
+          - os: macos-latest
+            runtime: osx-x64
+            archive: tar.gz
+
+          - os: macos-latest
+            runtime: osx-arm64
+            archive: tar.gz
 
     steps:
-      - name: Checkout
+      - name: Checkout release tag
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
-          token: ${{ github.token }}
-          fetch-depth: 1
-          persist-credentials: false
+          ref: ${{ github.event.release.tag_name || github.ref }}
+
+      - name: Read presets
+        id: presets
+        shell: pwsh
+        run: |
+          $preset = Get-Content presets.json | ConvertFrom-Json
+
+          if (-not $preset.version) {
+            throw "presets.json is missing version."
+          }
+
+          $appName = if ($preset.appName) { $preset.appName } else { "ClipSplitter" }
+          $version = $preset.version
+          $tag = "v$version"
+
+          "appName=$appName" >> $env:GITHUB_OUTPUT
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "tag=$tag" >> $env:GITHUB_OUTPUT
 
       - name: Show .NET SDK
         run: dotnet --info
-
-      - name: Resolve release version
-        id: version
-        shell: pwsh
-        env:
-          INPUT_TAG: ${{ github.event.inputs.tag }}
-        run: |
-          if (-not [string]::IsNullOrWhiteSpace($env:INPUT_TAG)) {
-            $tag = $env:INPUT_TAG
-          } else {
-            $tag = $env:GITHUB_REF_NAME
-          }
-
-          if ($tag -notmatch '^v\d+\.\d+\.\d+$') {
-            throw "Release tag '$tag' must use vX.Y.Z format, for example v1.0.0."
-          }
-
-          $semver = $tag.TrimStart("v")
-          "tag=$tag" >> $env:GITHUB_OUTPUT
-          "semver=$semver" >> $env:GITHUB_OUTPUT
-          Write-Host "Release tag: $tag"
 
       - name: Restore
         run: dotnet restore ClipSplitterApp.sln
 
       - name: Build
-        run: dotnet build ClipSplitterApp.sln --configuration Release --no-restore /p:Version=${{ steps.version.outputs.semver }}
+        run: dotnet build ClipSplitterApp.sln --configuration Release --no-restore /p:Version=${{ steps.presets.outputs.version }}
 
       - name: Publish
-        run: dotnet publish ClipSplitterApp/ClipSplitterApp.csproj --configuration Release --runtime win-x64 --self-contained true --output artifacts/win-x64 /p:Version=${{ steps.version.outputs.semver }}
+        run: dotnet publish ClipSplitterApp/ClipSplitterApp.csproj --configuration Release --runtime ${{ matrix.runtime }} --self-contained true --output artifacts/${{ matrix.runtime }} /p:Version=${{ steps.presets.outputs.version }}
 
-      - name: Package
+      - name: Package Windows
+        if: matrix.archive == 'zip'
         shell: pwsh
-        run: Compress-Archive -Path artifacts/win-x64/* -DestinationPath ClipSplitter-${{ steps.version.outputs.tag }}-win-x64.zip -Force
+        run: |
+          $asset = "${{ steps.presets.outputs.appName }}-${{ steps.presets.outputs.tag }}-${{ matrix.runtime }}.zip"
+          Compress-Archive -Path "artifacts/${{ matrix.runtime }}/*" -DestinationPath $asset -Force
+          "ASSET_PATH=$asset" >> $env:GITHUB_ENV
 
-      - name: Create GitHub release
-        shell: pwsh
+      - name: Package Linux/macOS
+        if: matrix.archive == 'tar.gz'
+        shell: bash
+        run: |
+          asset="${{ steps.presets.outputs.appName }}-${{ steps.presets.outputs.tag }}-${{ matrix.runtime }}.tar.gz"
+          tar -czf "$asset" -C "artifacts/${{ matrix.runtime }}" .
+          echo "ASSET_PATH=$asset" >> "$GITHUB_ENV"
+
+      - name: Upload package to release
         env:
           GH_TOKEN: ${{ github.token }}
-          OWNER: ${{ github.repository_owner }}
-          REPO: ${{ github.event.repository.name }}
-          TAG: ${{ steps.version.outputs.tag }}
-          SHA: ${{ github.sha }}
-          ZIP_PATH: ClipSplitter-${{ steps.version.outputs.tag }}-win-x64.zip
+        shell: bash
         run: |
-          $headers = @{
-            Authorization = "Bearer $env:GH_TOKEN"
-            Accept = "application/vnd.github+json"
-            "X-GitHub-Api-Version" = "2022-11-28"
-          }
-
-          $releaseBody = @{
-            tag_name = $env:TAG
-            target_commitish = $env:SHA
-            name = "ClipSplitter $env:TAG"
-            body = "Automated ClipSplitter build for $env:TAG."
-            draft = $false
-            prerelease = $false
-            generate_release_notes = $true
-          } | ConvertTo-Json
-
-          $release = Invoke-RestMethod `
-            -Method Post `
-            -Uri "https://api.github.com/repos/$env:OWNER/$env:REPO/releases" `
-            -Headers $headers `
-            -ContentType "application/json" `
-            -Body $releaseBody
-
-          $uploadHeaders = @{
-            Authorization = "Bearer $env:GH_TOKEN"
-            Accept = "application/vnd.github+json"
-            "X-GitHub-Api-Version" = "2022-11-28"
-            "Content-Type" = "application/zip"
-          }
-
-          $uploadUri = "https://uploads.github.com/repos/$env:OWNER/$env:REPO/releases/$($release.id)/assets?name=$env:ZIP_PATH"
-          Invoke-RestMethod `
-            -Method Post `
-            -Uri $uploadUri `
-            -Headers $uploadHeaders `
-            -InFile $env:ZIP_PATH
+          gh release upload "${{ github.event.release.tag_name || steps.presets.outputs.tag }}" "$ASSET_PATH" --clobber
