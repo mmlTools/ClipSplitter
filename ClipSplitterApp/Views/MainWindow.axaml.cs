@@ -400,6 +400,11 @@ public partial class MainWindow : Window
         OpenUrl(DonationUrl);
     }
 
+    private void OpenFfmpegDownload_Click(object? sender, RoutedEventArgs e)
+    {
+        OpenUrl(FfmpegDownloadUrl);
+    }
+
     private void SetExportingState(bool isExporting)
     {
         SplitButton.Content = isExporting ? "Cancel export" : "Export selected";

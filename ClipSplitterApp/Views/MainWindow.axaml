@@ -3,37 +3,57 @@
         xmlns:views="clr-namespace:ClipSplitterApp.Views"
         x:Class="ClipSplitterApp.Views.MainWindow"
         x:DataType="views:MainWindow"
-        Title="Clip Splitter"
-        Width="980"
-        Height="700"
-        MinWidth="820"
-        MinHeight="600"
+        Title="ClipSplitter - Video Segment Exporter"
+        Width="1280" Height="820"
+        MinWidth="900" MinHeight="620"
+        Background="#0E1118"
         SystemDecorations="None"
         ExtendClientAreaToDecorationsHint="True"
-        ExtendClientAreaChromeHints="NoChrome">
+        ExtendClientAreaChromeHints="NoChrome"
+        ExtendClientAreaTitleBarHeightHint="0">
   <Window.Styles>
     <Style Selector="Button">
+      <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.window-control">
+      <Setter Property="Width" Value="34" />
+      <Setter Property="Height" Value="28" />
+      <Setter Property="MinWidth" Value="34" />
+      <Setter Property="MinHeight" Value="28" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="CornerRadius" Value="4" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="#CBD5E1" />
+      <Setter Property="FontSize" Value="12" />
       <Setter Property="HorizontalContentAlignment" Value="Center" />
       <Setter Property="VerticalContentAlignment" Value="Center" />
-      <Setter Property="Cursor" Value="Hand" />
-      <Setter Property="Background" Value="#202735" />
-      <Setter Property="Foreground" Value="#eef2f7" />
-      <Setter Property="BorderBrush" Value="#334155" />
-      <Setter Property="BorderThickness" Value="1" />
+    </Style>
+    <Style Selector="Button.window-control:pointerover">
+      <Setter Property="Background" Value="#202838" />
+    </Style>
+    <Style Selector="Button.close-control:pointerover">
+      <Setter Property="Background" Value="#C2413D" />
+      <Setter Property="Foreground" Value="#FFFFFF" />
+    </Style>
+    <Style Selector="Button.action-button">
+      <Setter Property="MinWidth" Value="104" />
+      <Setter Property="MinHeight" Value="36" />
+      <Setter Property="Padding" Value="14,7" />
       <Setter Property="CornerRadius" Value="6" />
-      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Background" Value="#202838" />
+      <Setter Property="Foreground" Value="#E5ECF7" />
+      <Setter Property="BorderBrush" Value="#344052" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
     </Style>
-    <Style Selector="Button:pointerover">
-      <Setter Property="Background" Value="#283244" />
-      <Setter Property="BorderBrush" Value="#4b5f7a" />
+    <Style Selector="Button.action-button:pointerover">
+      <Setter Property="Background" Value="#2A3447" />
+      <Setter Property="BorderBrush" Value="#4B5C76" />
     </Style>
-    <Style Selector="Button:pressed">
-      <Setter Property="Background" Value="#18202d" />
-      <Setter Property="BorderBrush" Value="#64748b" />
-    </Style>
-    <Style Selector="Button:disabled">
-      <Setter Property="Cursor" Value="Arrow" />
-      <Setter Property="Opacity" Value="0.55" />
+    <Style Selector="Button.action-button:pressed">
+      <Setter Property="Background" Value="#18202E" />
     </Style>
     <Style Selector="TextBox, NumericUpDown">
       <Setter Property="Background" Value="#10141c" />
@@ -48,44 +68,11 @@
     <Style Selector="TextBox:focus, NumericUpDown:focus">
       <Setter Property="BorderBrush" Value="#3b82f6" />
     </Style>
-    <Style Selector="Button.window-control">
-      <Setter Property="Width" Value="34" />
-      <Setter Property="Height" Value="30" />
-      <Setter Property="Padding" Value="0" />
-      <Setter Property="CornerRadius" Value="5" />
-      <Setter Property="BorderThickness" Value="0" />
-      <Setter Property="Background" Value="Transparent" />
-      <Setter Property="Foreground" Value="#aeb8c7" />
-      <Setter Property="FontSize" Value="14" />
-      <Setter Property="MinWidth" Value="34" />
-      <Setter Property="MinHeight" Value="30" />
-    </Style>
-    <Style Selector="Button.window-control:pointerover">
-      <Setter Property="Background" Value="#232b39" />
-      <Setter Property="Foreground" Value="#ffffff" />
-    </Style>
-    <Style Selector="Button.window-control.close:pointerover">
-      <Setter Property="Background" Value="#b91c1c" />
-      <Setter Property="Foreground" Value="#ffffff" />
-    </Style>
-    <Style Selector="Button.action-button">
-      <Setter Property="Width" Value="132" />
-      <Setter Property="MinWidth" Value="132" />
-      <Setter Property="Height" Value="34" />
-      <Setter Property="Padding" Value="12,0" />
-    </Style>
     <Style Selector="Button.preview-button">
       <Setter Property="Width" Value="88" />
       <Setter Property="MinWidth" Value="88" />
       <Setter Property="Height" Value="30" />
       <Setter Property="Padding" Value="10,0" />
-    </Style>
-    <Style Selector="Button.support-button">
-      <Setter Property="Height" Value="32" />
-      <Setter Property="Padding" Value="12,0" />
-      <Setter Property="Background" Value="#172033" />
-      <Setter Property="BorderBrush" Value="#3b82f6" />
-      <Setter Property="BorderThickness" Value="1" />
     </Style>
     <Style Selector="Button.accent">
       <Setter Property="Background" Value="#2563eb" />
@@ -110,40 +97,39 @@
     </Style>
   </Window.Styles>
 
-  <Grid Background="#0f1218">
-    <Grid RowDefinitions="48,*">
+  <Grid>
+    <Grid RowDefinitions="38,*" Margin="6">
       <Border x:Name="TitleBar"
-              Background="#10141c"
-              BorderBrush="#263040"
-              BorderThickness="0,0,0,1"
+              Grid.Row="0"
+              Background="#0E1118"
               PointerPressed="TitleBar_PointerPressed">
-        <Grid ColumnDefinitions="Auto,*,Auto" Margin="12,0">
-          <TextBlock Grid.Column="1"
-                     Text="Clip Splitter"
-                     HorizontalAlignment="Center"
-                     VerticalAlignment="Center"
-                     FontWeight="SemiBold" />
+        <Grid ColumnDefinitions="Auto,*,Auto">
+          <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" Margin="10,0,0,0">
+            <TextBlock Text="CS" FontSize="11" FontWeight="Bold" Foreground="#9CB7FF" VerticalAlignment="Center" />
+            <TextBlock Text="ClipSplitter - Video Segment Exporter" Opacity=".78" VerticalAlignment="Center" />
+          </StackPanel>
 
-          <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
-            <Button Classes="window-control" Content="-" Click="Minimize_Click" ToolTip.Tip="Minimize" />
-            <Button Classes="window-control" Content="□" Click="MaximizeRestore_Click" ToolTip.Tip="Maximize or restore" />
-            <Button Classes="window-control close" Content="×" Click="Close_Click" ToolTip.Tip="Close" />
+          <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="0" VerticalAlignment="Center">
+            <Button Classes="window-control" Click="OpenFfmpegDownload_Click" ToolTip.Tip="Download FFmpeg">
+              <TextBlock Text="↓" FontSize="13" Foreground="#9CB7FF" />
+            </Button>
+            <Button Classes="window-control" Click="SupportProject_Click" ToolTip.Tip="Support the project">
+              <TextBlock Text="♥" FontSize="12" Foreground="#E8394A" />
+            </Button>
+            <Rectangle Width="1" Height="14" Fill="#33FFFFFF" Margin="4,0" VerticalAlignment="Center" />
+            <Button Classes="window-control minimize-control" Content="-" Click="Minimize_Click" ToolTip.Tip="Minimize" />
+            <Button Classes="window-control maximize-control" Content="+" Click="MaximizeRestore_Click" ToolTip.Tip="Maximize" />
+            <Button Classes="window-control close-control" Content="x" Click="Close_Click" ToolTip.Tip="Close" />
           </StackPanel>
         </Grid>
       </Border>
 
-      <Grid Grid.Row="1" RowDefinitions="Auto,*" Margin="24">
-        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+      <Grid Grid.Row="1" RowDefinitions="Auto,*" Margin="10">
+        <Grid ColumnDefinitions="*" ColumnSpacing="12">
           <StackPanel Spacing="8">
-            <TextBlock Text="Clip Splitter" FontSize="30" FontWeight="SemiBold" />
+            <TextBlock Text="Clip Splitter" FontSize="26" FontWeight="SemiBold" />
             <TextBlock Text="Preview the generated cuts, choose the clips you want, then export only those segments." Opacity="0.75" />
           </StackPanel>
-          <Button Grid.Column="1"
-                  Classes="support-button"
-                  Content="Support this project"
-                  Click="SupportProject_Click"
-                  VerticalAlignment="Top"
-                  ToolTip.Tip="Open PayPal support page" />
         </Grid>
 
         <Border Grid.Row="1" Margin="0,22,0,0" Padding="20" CornerRadius="8" Background="#151922" BorderBrush="#2b3242" BorderThickness="1">
