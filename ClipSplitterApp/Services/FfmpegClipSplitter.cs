@@ -1,24 +1,22 @@
 using System;
-using System.Diagnostics;
-using System.Globalization;
-using System.IO;
 using System.Collections.Generic;
-using System.Text;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace ClipSplitterApp.Services;
 
+/// <summary>Plans fixed-length segments and exports them in the source's own shape.</summary>
 public sealed class FfmpegClipSplitter
 {
+    private static readonly HashSet<string> ReencodeContainers = new(StringComparer.OrdinalIgnoreCase) { ".mp4", ".mov", ".mkv", ".m4v" };
+
     private readonly Action<string> _log;
 
     public FfmpegClipSplitter(Action<string> log) => _log = log;
 
-    public async Task<IReadOnlyList<ClipSegment>> CreatePlanAsync(string inputFile, int segmentSeconds, CancellationToken token)
+    public static IReadOnlyList<ClipSegment> CreatePlan(TimeSpan duration, int segmentSeconds)
     {
-        var ffprobe = FindTool("ffprobe");
-        var duration = await GetDurationAsync(ffprobe, inputFile, token);
         if (duration <= TimeSpan.Zero)
             throw new InvalidOperationException("Could not detect video duration.");
 
@@ -27,8 +25,8 @@ public sealed class FfmpegClipSplitter
 
         for (var index = 0; index < totalSegments; index++)
         {
-            var start = TimeSpan.FromSeconds(index * segmentSeconds);
-            var end = TimeSpan.FromSeconds(Math.Min((index + 1) * segmentSeconds, duration.TotalSeconds));
+            var start = TimeSpan.FromSeconds((double)index * segmentSeconds);
+            var end = TimeSpan.FromSeconds(Math.Min((index + 1d) * segmentSeconds, duration.TotalSeconds));
             if (end > start)
                 segments.Add(new ClipSegment(index, start, end));
         }
@@ -36,147 +34,110 @@ public sealed class FfmpegClipSplitter
         return segments;
     }
 
+    /// <summary>
+    /// The extension an exported clip gets. Stream copies keep the source container; re-encodes
+    /// produce H.264/AAC, which only some containers can hold, so the rest fall back to MP4.
+    /// </summary>
+    public static string GetOutputExtension(string inputFile, bool reencode)
+    {
+        var extension = Path.GetExtension(inputFile);
+        if (string.IsNullOrWhiteSpace(extension))
+            return ".mp4";
+
+        return !reencode || ReencodeContainers.Contains(extension) ? extension : ".mp4";
+    }
+
     public async Task SplitAsync(SplitOptions options, Action<double> progress, CancellationToken token)
     {
-        var ffmpeg = FindTool("ffmpeg");
+        _log(options.ReencodeForExactCuts ? "Mode: re-encode for exact cuts" : "Mode: fast stream copy");
 
-        _log($"Using FFmpeg: {ffmpeg}");
-        _log($"Segment length: {options.SegmentSeconds} seconds");
+        var extension = GetOutputExtension(options.InputFile, options.ReencodeForExactCuts);
+        var total = options.Segments.Count;
 
-        var inputName = Path.GetFileNameWithoutExtension(options.InputFile);
-        var extension = Path.GetExtension(options.InputFile);
-        var totalSegments = options.Segments.Count;
-
-        for (var index = 0; index < totalSegments; index++)
+        for (var index = 0; index < total; index++)
         {
             token.ThrowIfCancellationRequested();
 
             var segment = options.Segments[index];
-            var start = segment.Start;
-            var end = segment.End;
-            var length = segment.Length;
-            if (length <= TimeSpan.Zero) break;
+            if (segment.Length <= TimeSpan.Zero)
+                continue;
 
             var outputFile = Path.Combine(
                 options.OutputDirectory,
-                $"{SanitizeFileName(inputName)}-{FormatFileStamp(start)}-{FormatFileStamp(end)}{extension}");
+                ClipFormat.OutputFileName(options.InputFile, segment.Start, segment.End, extension));
 
             _log($"Creating {Path.GetFileName(outputFile)}");
-            await RunFfmpegSegmentAsync(ffmpeg, options.InputFile, outputFile, start, length, options.ReencodeForExactCuts, token);
 
-            progress(Math.Round(((index + 1d) / totalSegments) * 100d, 2));
+            var done = index;
+            await RunSegmentAsync(
+                options.InputFile,
+                outputFile,
+                segment,
+                options.ReencodeForExactCuts,
+                fraction => progress((done + fraction) / total * 100d),
+                token);
         }
     }
 
     public async Task CreateThumbnailAsync(string inputFile, ClipSegment segment, string outputFile, CancellationToken token)
     {
-        var ffmpeg = FindTool("ffmpeg");
         Directory.CreateDirectory(Path.GetDirectoryName(outputFile) ?? AppContext.BaseDirectory);
 
         var offset = segment.Start + TimeSpan.FromTicks(segment.Length.Ticks / 2);
-        var args = $"-y -ss {FormatArgTime(offset)} -i {Quote(inputFile)} -frames:v 1 -vf scale=112:-1:force_original_aspect_ratio=decrease {Quote(outputFile)}";
-        await RunProcessCaptureAsync(ffmpeg, args, token);
-    }
-
-    public async Task CreatePreviewClipAsync(string inputFile, ClipSegment segment, string outputFile, CancellationToken token)
-    {
-        var ffmpeg = FindTool("ffmpeg");
-        Directory.CreateDirectory(Path.GetDirectoryName(outputFile) ?? AppContext.BaseDirectory);
-        await RunFfmpegSegmentAsync(ffmpeg, inputFile, outputFile, segment.Start, segment.Length, true, token);
-    }
-
-    private static async Task<TimeSpan> GetDurationAsync(string ffprobe, string inputFile, CancellationToken token)
-    {
-        var args = $"-v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 {Quote(inputFile)}";
-        var output = await RunProcessCaptureAsync(ffprobe, args, token);
-
-        if (double.TryParse(output.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var seconds))
-            return TimeSpan.FromSeconds(seconds);
-
-        return TimeSpan.Zero;
-    }
-
-    private static async Task RunFfmpegSegmentAsync(string ffmpeg, string inputFile, string outputFile, TimeSpan start, TimeSpan length, bool reencode, CancellationToken token)
-    {
-        var codecArgs = reencode
-            ? "-c:v libx264 -preset veryfast -crf 20 -c:a aac -b:a 192k"
-            : "-c copy -avoid_negative_ts make_zero";
-
-        // Fast mode uses stream copy. It is quick, but cuts can align to keyframes.
-        // Exact mode re-encodes and gives more accurate cut points.
-        var args = $"-y -ss {FormatArgTime(start)} -i {Quote(inputFile)} -t {FormatArgTime(length)} {codecArgs} {Quote(outputFile)}";
-        await RunProcessCaptureAsync(ffmpeg, args, token);
-    }
-
-    private static async Task<string> RunProcessCaptureAsync(string executable, string arguments, CancellationToken token)
-    {
-        var psi = new ProcessStartInfo
+        var args = new[]
         {
-            FileName = executable,
-            Arguments = arguments,
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true
+            "-hide_banner", "-nostdin", "-y", "-loglevel", "error",
+            "-ss", FfmpegTools.ArgTime(offset),
+            "-i", inputFile,
+            "-map", "0:V:0",
+            "-frames:v", "1",
+            "-vf", "scale=256:-2",
+            "-q:v", "4",
+            outputFile
         };
 
-        using var process = new Process { StartInfo = psi };
-        var output = new StringBuilder();
-        var error = new StringBuilder();
+        await FfmpegTools.RunCaptureAsync("ffmpeg", args, token);
+    }
 
-        process.OutputDataReceived += (_, e) => { if (e.Data != null) output.AppendLine(e.Data); };
-        process.ErrorDataReceived += (_, e) => { if (e.Data != null) error.AppendLine(e.Data); };
+    private static async Task RunSegmentAsync(string inputFile, string outputFile, ClipSegment segment, bool reencode, Action<double> progress, CancellationToken token)
+    {
+        // Fast mode uses stream copy. It is quick, but cuts can align to keyframes.
+        // Exact mode re-encodes and gives more accurate cut points.
+        var args = new List<string>
+        {
+            "-ss", FfmpegTools.ArgTime(segment.Start),
+            "-i", inputFile,
+            "-t", FfmpegTools.ArgTime(segment.Length)
+        };
+
+        if (reencode)
+            args.AddRange(new[] { "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k" });
+        else
+            args.AddRange(new[] { "-c", "copy", "-avoid_negative_ts", "make_zero" });
+
+        args.Add(outputFile);
 
         try
         {
-            if (!process.Start())
-                throw new InvalidOperationException($"Could not start {executable}.");
+            await FfmpegTools.RunFfmpegAsync(args, segment.Length, progress, token);
         }
-        catch (Exception ex)
+        catch
         {
-            throw new InvalidOperationException($"Could not start {executable}. Install FFmpeg and add it to PATH, or place it in tools/ffmpeg beside the app. Details: {ex.Message}", ex);
+            TryDelete(outputFile);
+            throw;
         }
-
-        process.BeginOutputReadLine();
-        process.BeginErrorReadLine();
-
-        await process.WaitForExitAsync(token);
-
-        if (process.ExitCode != 0)
-            throw new InvalidOperationException($"{Path.GetFileName(executable)} failed. {error}".Trim());
-
-        return output.Length > 0 ? output.ToString() : error.ToString();
     }
 
-    private static string FindTool(string toolName)
+    internal static void TryDelete(string file)
     {
-        var exe = OperatingSystem.IsWindows() ? toolName + ".exe" : toolName;
-        var baseDir = AppContext.BaseDirectory;
-        var local = Path.Combine(baseDir, "tools", "ffmpeg", exe);
-        if (File.Exists(local)) return local;
-        return exe;
-    }
-
-    private static string Quote(string path) => "\"" + path.Replace("\"", "\\\"") + "\"";
-
-    private static string FormatArgTime(TimeSpan time)
-        => time.ToString(@"hh\:mm\:ss\.fff", CultureInfo.InvariantCulture);
-
-    public static string FormatTime(TimeSpan time)
-        => time.ToString(time.TotalHours >= 1 ? @"hh\:mm\:ss" : @"mm\:ss", CultureInfo.InvariantCulture);
-
-    public static string FormatFileStamp(TimeSpan time)
-    {
-        if (time.TotalHours >= 1)
-            return time.ToString(@"hh\-mm\-ss", CultureInfo.InvariantCulture);
-
-        return time.ToString(@"mm\-ss", CultureInfo.InvariantCulture);
-    }
-
-    private static string SanitizeFileName(string name)
-    {
-        foreach (var c in Path.GetInvalidFileNameChars())
-            name = name.Replace(c, '-');
-        return name.Trim();
+        try
+        {
+            if (File.Exists(file))
+                File.Delete(file);
+        }
+        catch
+        {
+            // A half-written file we cannot remove is not worth failing the export over.
+        }
     }
 }

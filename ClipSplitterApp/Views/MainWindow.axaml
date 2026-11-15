@@ -1,11 +1,12 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:views="clr-namespace:ClipSplitterApp.Views"
+        xmlns:controls="clr-namespace:ClipSplitterApp.Controls"
         x:Class="ClipSplitterApp.Views.MainWindow"
         x:DataType="views:MainWindow"
-        Title="ClipSplitter - Video Segment Exporter"
+        Title="ClipSplitter"
         Width="1280" Height="820"
-        MinWidth="900" MinHeight="620"
+        MinWidth="1180" MinHeight="700"
         Background="#0E1118"
         SystemDecorations="None"
         ExtendClientAreaToDecorationsHint="True"
@@ -15,6 +16,8 @@
     <Style Selector="Button">
       <Setter Property="Cursor" Value="Hand" />
     </Style>
+
+    <!-- Title bar buttons -->
     <Style Selector="Button.window-control">
       <Setter Property="Width" Value="34" />
       <Setter Property="Height" Value="28" />
@@ -26,19 +29,22 @@
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="Foreground" Value="#CBD5E1" />
       <Setter Property="FontSize" Value="12" />
+      <Setter Property="Focusable" Value="False" />
       <Setter Property="HorizontalContentAlignment" Value="Center" />
       <Setter Property="VerticalContentAlignment" Value="Center" />
     </Style>
-    <Style Selector="Button.window-control:pointerover">
+    <Style Selector="Button.window-control:pointerover /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="#202838" />
     </Style>
-    <Style Selector="Button.close-control:pointerover">
+    <Style Selector="Button.close-control:pointerover /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="#C2413D" />
       <Setter Property="Foreground" Value="#FFFFFF" />
     </Style>
+
+    <!-- Buttons -->
     <Style Selector="Button.action-button">
       <Setter Property="MinWidth" Value="104" />
-      <Setter Property="MinHeight" Value="36" />
+      <Setter Property="MinHeight" Value="34" />
       <Setter Property="Padding" Value="14,7" />
       <Setter Property="CornerRadius" Value="6" />
       <Setter Property="Background" Value="#202838" />
@@ -48,41 +54,161 @@
       <Setter Property="HorizontalContentAlignment" Value="Center" />
       <Setter Property="VerticalContentAlignment" Value="Center" />
     </Style>
-    <Style Selector="Button.action-button:pointerover">
+    <Style Selector="Button.action-button:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#2A3447" />
+      <Setter Property="BorderBrush" Value="#4B5C76" />
+      <Setter Property="Foreground" Value="#FFFFFF" />
+    </Style>
+    <Style Selector="Button.action-button:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#18202E" />
+    </Style>
+    <Style Selector="Button.compact">
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="MinHeight" Value="30" />
+      <Setter Property="Padding" Value="12,5" />
+      <Setter Property="FontSize" Value="12.5" />
+    </Style>
+    <Style Selector="Button.accent">
+      <Setter Property="Background" Value="#2563EB" />
+      <Setter Property="BorderBrush" Value="#3B82F6" />
+      <Setter Property="Foreground" Value="#FFFFFF" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="Button.accent:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#1D4ED8" />
+      <Setter Property="BorderBrush" Value="#60A5FA" />
+    </Style>
+    <Style Selector="Button.accent:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#1E40AF" />
+    </Style>
+    <Style Selector="Button.icon-button">
+      <Setter Property="Width" Value="30" />
+      <Setter Property="Height" Value="30" />
+      <Setter Property="MinWidth" Value="30" />
+      <Setter Property="MinHeight" Value="30" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Background" Value="#202838" />
+      <Setter Property="BorderBrush" Value="#344052" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Focusable" Value="False" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.icon-button:pointerover /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="#2A3447" />
       <Setter Property="BorderBrush" Value="#4B5C76" />
     </Style>
-    <Style Selector="Button.action-button:pressed">
-      <Setter Property="Background" Value="#18202E" />
+    <Style Selector="Button.icon-button.flat">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
     </Style>
+
+    <!-- Inputs -->
     <Style Selector="TextBox, NumericUpDown">
-      <Setter Property="Background" Value="#10141c" />
-      <Setter Property="Foreground" Value="#edf2f7" />
-      <Setter Property="BorderBrush" Value="#2f394a" />
+      <Setter Property="Background" Value="#10141C" />
+      <Setter Property="Foreground" Value="#EDF2F7" />
+      <Setter Property="BorderBrush" Value="#2F394A" />
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="CornerRadius" Value="6" />
     </Style>
     <Style Selector="TextBox:pointerover, NumericUpDown:pointerover">
-      <Setter Property="BorderBrush" Value="#46566f" />
+      <Setter Property="BorderBrush" Value="#46566F" />
     </Style>
     <Style Selector="TextBox:focus, NumericUpDown:focus">
-      <Setter Property="BorderBrush" Value="#3b82f6" />
+      <Setter Property="BorderBrush" Value="#3B82F6" />
     </Style>
-    <Style Selector="Button.preview-button">
-      <Setter Property="Width" Value="88" />
-      <Setter Property="MinWidth" Value="88" />
-      <Setter Property="Height" Value="30" />
-      <Setter Property="Padding" Value="10,0" />
+
+    <!-- Segmented choices -->
+    <Style Selector="RadioButton.segment">
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="MinHeight" Value="32" />
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="Padding" Value="8,6" />
+      <Setter Property="FontSize" Value="12.5" />
+      <Setter Property="Background" Value="#10141C" />
+      <Setter Property="Foreground" Value="#AEB8C7" />
+      <Setter Property="BorderBrush" Value="#2F394A" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Focusable" Value="False" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border Background="{TemplateBinding Background}"
+                  BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{TemplateBinding BorderThickness}"
+                  CornerRadius="{TemplateBinding CornerRadius}"
+                  Padding="{TemplateBinding Padding}">
+            <ContentPresenter Content="{TemplateBinding Content}"
+                              ContentTemplate="{TemplateBinding ContentTemplate}"
+                              HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+          </Border>
+        </ControlTemplate>
+      </Setter>
     </Style>
-    <Style Selector="Button.accent">
-      <Setter Property="Background" Value="#2563eb" />
-      <Setter Property="BorderBrush" Value="#3b82f6" />
-      <Setter Property="Foreground" Value="#ffffff" />
+    <Style Selector="RadioButton.segment:pointerover">
+      <Setter Property="BorderBrush" Value="#46566F" />
+      <Setter Property="Foreground" Value="#E5ECF7" />
     </Style>
-    <Style Selector="Button.accent:pointerover">
-      <Setter Property="Background" Value="#1d4ed8" />
-      <Setter Property="BorderBrush" Value="#60a5fa" />
+    <Style Selector="RadioButton.segment:checked">
+      <Setter Property="Background" Value="#1B2B4D" />
+      <Setter Property="BorderBrush" Value="#3B82F6" />
+      <Setter Property="Foreground" Value="#FFFFFF" />
+      <Setter Property="FontWeight" Value="SemiBold" />
     </Style>
+    <Style Selector="RadioButton.segment:disabled">
+      <Setter Property="Opacity" Value="0.45" />
+    </Style>
+
+    <!-- Panels and text -->
+    <Style Selector="Border.panel">
+      <Setter Property="Padding" Value="16" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="Background" Value="#151922" />
+      <Setter Property="BorderBrush" Value="#2B3242" />
+      <Setter Property="BorderThickness" Value="1" />
+    </Style>
+    <Style Selector="Border.slot-row">
+      <Setter Property="Padding" Value="10,8" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Background" Value="#10141C" />
+      <Setter Property="BorderBrush" Value="#2F394A" />
+      <Setter Property="BorderThickness" Value="1" />
+    </Style>
+    <Style Selector="TextBlock.section">
+      <Setter Property="FontSize" Value="11" />
+      <Setter Property="FontWeight" Value="Bold" />
+      <Setter Property="Foreground" Value="#7C8BA3" />
+      <Setter Property="LetterSpacing" Value="0.8" />
+    </Style>
+    <Style Selector="TextBlock.label">
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="Foreground" Value="#AEB8C7" />
+      <Setter Property="Margin" Value="0,4,0,-2" />
+    </Style>
+    <Style Selector="TextBlock.hint">
+      <Setter Property="FontSize" Value="11.5" />
+      <Setter Property="Foreground" Value="#7C8BA3" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <Style Selector="ListBox.clip-list ListBoxItem">
+      <Setter Property="Padding" Value="8,6" />
+    </Style>
+    <Style Selector="ListBox.clip-list ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#171D29" />
+    </Style>
+    <Style Selector="ListBox.clip-list ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#1B2B4D" />
+    </Style>
+    <Style Selector="ListBox.clip-list ListBoxItem:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#213560" />
+    </Style>
+
+    <!-- Window resize grips -->
     <Style Selector="Border.resize-horizontal">
       <Setter Property="Cursor" Value="SizeWestEast" />
     </Style>
@@ -106,7 +232,7 @@
         <Grid ColumnDefinitions="Auto,*,Auto">
           <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" Margin="10,0,0,0">
             <TextBlock Text="CS" FontSize="11" FontWeight="Bold" Foreground="#9CB7FF" VerticalAlignment="Center" />
-            <TextBlock Text="ClipSplitter - Video Segment Exporter" Opacity=".78" VerticalAlignment="Center" />
+            <TextBlock x:Name="TitleText" Text="ClipSplitter" Opacity=".78" VerticalAlignment="Center" />
           </StackPanel>
 
           <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="0" VerticalAlignment="Center">
@@ -124,99 +250,337 @@
         </Grid>
       </Border>
 
-      <Grid Grid.Row="1" RowDefinitions="Auto,*" Margin="10">
-        <Grid ColumnDefinitions="*" ColumnSpacing="12">
-          <StackPanel Spacing="8">
-            <TextBlock Text="Clip Splitter" FontSize="26" FontWeight="SemiBold" />
-            <TextBlock Text="Preview the generated cuts, choose the clips you want, then export only those segments." Opacity="0.75" />
-          </StackPanel>
-        </Grid>
+      <Grid Grid.Row="1" Margin="10,2,10,10" ColumnSpacing="12">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="5*" MinWidth="420" />
+          <ColumnDefinition Width="4*" MinWidth="320" />
+          <ColumnDefinition Width="320" />
+        </Grid.ColumnDefinitions>
 
-        <Border Grid.Row="1" Margin="0,22,0,0" Padding="20" CornerRadius="8" Background="#151922" BorderBrush="#2b3242" BorderThickness="1">
-          <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,2*,Auto,*,Auto" ColumnDefinitions="*,Auto" RowSpacing="14" ColumnSpacing="12">
-            <TextBlock Grid.Row="0" Grid.ColumnSpan="2" Text="Input clip" FontWeight="SemiBold" />
-            <TextBox Grid.Row="1" Grid.Column="0" x:Name="InputPathBox" Watermark="Select a video file..." IsReadOnly="True" />
-            <Button Grid.Row="1" Grid.Column="1" x:Name="BrowseInputButton" Classes="action-button" Content="Browse clip" Click="BrowseInput_Click" />
-
-            <TextBlock Grid.Row="2" Grid.ColumnSpan="2" Text="Output folder" FontWeight="SemiBold" />
-            <TextBox Grid.Row="3" Grid.Column="0" x:Name="OutputPathBox" Watermark="Select output folder..." IsReadOnly="True" />
-            <Button Grid.Row="3" Grid.Column="1" x:Name="BrowseOutputButton" Classes="action-button" Content="Browse folder" Click="BrowseOutput_Click" />
-
-            <Grid Grid.Row="4" Grid.ColumnSpan="2" ColumnDefinitions="Auto,120,Auto,*,Auto" ColumnSpacing="12" VerticalAlignment="Center">
-              <TextBlock Text="Split every" VerticalAlignment="Center" />
-              <NumericUpDown Grid.Column="1"
-                             x:Name="SegmentSecondsBox"
-                             Minimum="1"
-                             Maximum="86400"
-                             Value="30"
-                             Increment="1"
-                             ValueChanged="SegmentSecondsBox_ValueChanged" />
-              <TextBlock Grid.Column="2" Text="seconds" VerticalAlignment="Center" />
-              <CheckBox Grid.Column="3" x:Name="ReencodeCheckBox" Content="Re-encode for exact cuts" VerticalAlignment="Center" />
-              <Button Grid.Column="4" x:Name="SplitButton" Classes="accent action-button" Content="Export selected" Click="Split_Click" />
-            </Grid>
-
-            <Grid Grid.Row="5" Grid.ColumnSpan="2" RowDefinitions="Auto,*" RowSpacing="10">
-              <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="8">
-                <TextBlock Text="Cut preview" FontWeight="SemiBold" VerticalAlignment="Center" />
-                <TextBlock Grid.Column="1" x:Name="PreviewSummaryText" Opacity="0.65" VerticalAlignment="Center" />
-                <Button Grid.Column="2" x:Name="SelectAllButton" Classes="action-button" Content="Select all" Click="SelectAll_Click" />
-                <Button Grid.Column="3" x:Name="ClearSelectionButton" Classes="action-button" Content="Clear" Click="ClearSelection_Click" />
+        <!-- Left: the source video and its clips -->
+        <Grid Grid.Column="0" RowDefinitions="*,Auto" RowSpacing="12">
+          <Border Classes="panel">
+            <Grid RowDefinitions="Auto,Auto,Auto,*" RowSpacing="10">
+              <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Classes="section" Text="SOURCE VIDEO" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1" x:Name="PreviewSummaryText" FontSize="12" Foreground="#AEB8C7" VerticalAlignment="Center" />
               </Grid>
 
-              <ListBox Grid.Row="1"
+              <Grid Grid.Row="1" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                <TextBox x:Name="InputPathBox" Watermark="Select a video, or drop one here..." IsReadOnly="True" />
+                <Button Grid.Column="1" x:Name="BrowseInputButton" Classes="action-button" Content="Browse video" Click="BrowseInput_Click" />
+              </Grid>
+
+              <Grid Grid.Row="2" ColumnDefinitions="Auto,120,Auto,*,Auto,Auto" ColumnSpacing="8">
+                <TextBlock Text="Split every" VerticalAlignment="Center" />
+                <NumericUpDown Grid.Column="1"
+                               x:Name="SegmentSecondsBox"
+                               Minimum="1"
+                               Maximum="86400"
+                               Value="30"
+                               Increment="1"
+                               FormatString="0"
+                               ValueChanged="SegmentSecondsBox_ValueChanged" />
+                <TextBlock Grid.Column="2" Text="seconds" VerticalAlignment="Center" />
+                <Button Grid.Column="4" x:Name="SelectAllButton" Classes="action-button compact" Content="Select all" Click="SelectAll_Click" />
+                <Button Grid.Column="5" x:Name="ClearSelectionButton" Classes="action-button compact" Content="Clear" Click="ClearSelection_Click" />
+              </Grid>
+
+              <ListBox Grid.Row="3"
                        x:Name="PreviewList"
+                       Classes="clip-list"
                        ItemsSource="{Binding PreviewItems}"
-                       Background="#10141c"
-                       BorderBrush="#2b3242"
+                       SelectionChanged="PreviewList_SelectionChanged"
+                       Background="#10141C"
+                       BorderBrush="#2B3242"
                        BorderThickness="1"
                        CornerRadius="6"
-                       ScrollViewer.VerticalScrollBarVisibility="Auto">
+                       ScrollViewer.VerticalScrollBarVisibility="Auto"
+                       ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                 <ListBox.ItemTemplate>
                   <DataTemplate x:DataType="views:ClipPreviewItem">
-                    <Grid ColumnDefinitions="Auto,96,80,*,90,160,88" ColumnSpacing="12" Margin="8,6">
-                      <CheckBox IsChecked="{Binding IsSelected}" VerticalAlignment="Center" />
+                    <Grid ColumnDefinitions="Auto,104,*,Auto"
+                          ColumnSpacing="10"
+                          Background="Transparent"
+                          DoubleTapped="ClipRow_DoubleTapped"
+                          PointerPressed="ClipRow_PointerPressed"
+                          PointerMoved="ClipRow_PointerMoved"
+                          PointerReleased="ClipRow_PointerReleased"
+                          PointerCaptureLost="ClipRow_PointerCaptureLost">
+                      <CheckBox IsChecked="{Binding IsSelected}" VerticalAlignment="Center" MinWidth="0" Focusable="False" ToolTip.Tip="Include in Export selected" />
                       <Border Grid.Column="1"
-                              Width="96"
-                              Height="54"
-                              Background="#0b0f16"
-                              BorderBrush="#2f394a"
+                              Width="104"
+                              Height="58"
+                              Background="#0B0F16"
+                              BorderBrush="#2F394A"
                               BorderThickness="1"
                               CornerRadius="5"
                               ClipToBounds="True">
                         <Image Source="{Binding Thumbnail}" Stretch="UniformToFill" />
                       </Border>
-                      <TextBlock Grid.Column="2" Text="{Binding Label}" VerticalAlignment="Center" FontWeight="SemiBold" />
-                      <TextBlock Grid.Column="3" Text="{Binding TimeRange}" VerticalAlignment="Center" />
-                      <TextBlock Grid.Column="4" Text="{Binding Duration}" VerticalAlignment="Center" Opacity="0.75" />
-                      <TextBlock Grid.Column="5" Text="{Binding FileName}" VerticalAlignment="Center" Opacity="0.65" TextTrimming="CharacterEllipsis" />
-                      <Button Grid.Column="6"
-                              Classes="preview-button"
-                              Content="{Binding PreviewButtonText}"
-                              IsEnabled="{Binding CanPreview}"
-                              Click="PreviewClip_Click"
-                              VerticalAlignment="Center" />
+                      <StackPanel Grid.Column="2" VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Text="{Binding Label}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Text="{Binding TimeRange}" FontSize="12" Foreground="#C4CEDC" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Text="{Binding Duration}" FontSize="12" Foreground="#7C8BA3" TextTrimming="CharacterEllipsis" />
+                      </StackPanel>
+                      <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                        <Button Classes="icon-button" Click="PlayClip_Click" ToolTip.Tip="Preview this clip" AutomationProperties.Name="Preview this clip">
+                          <Path Data="M 0,0 L 9,5.5 L 0,11 Z" Fill="#E5ECF7" Margin="2,0,0,0" />
+                        </Button>
+                        <Button Classes="icon-button" Click="SendToTop_Click" ToolTip.Tip="Use as the top clip" AutomationProperties.Name="Use as the top clip">
+                          <Border Width="11" Height="17" BorderBrush="#9CB7FF" BorderThickness="1.2" CornerRadius="2">
+                            <Border VerticalAlignment="Top" Height="7" Background="#9CB7FF" />
+                          </Border>
+                        </Button>
+                        <Button Classes="icon-button" Click="SendToBottom_Click" ToolTip.Tip="Use as the bottom clip" AutomationProperties.Name="Use as the bottom clip">
+                          <Border Width="11" Height="17" BorderBrush="#9CB7FF" BorderThickness="1.2" CornerRadius="2">
+                            <Border VerticalAlignment="Bottom" Height="7" Background="#9CB7FF" />
+                          </Border>
+                        </Button>
+                      </StackPanel>
                     </Grid>
                   </DataTemplate>
                 </ListBox.ItemTemplate>
               </ListBox>
             </Grid>
+          </Border>
 
-            <ProgressBar Grid.Row="6" Grid.ColumnSpan="2" x:Name="ProgressBar" Minimum="0" Maximum="100" Height="14" />
+          <Border Grid.Row="1" Classes="panel">
+            <Grid RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="10">
+              <TextBlock Classes="section" Text="EXPORT" />
 
-            <TextBox Grid.Row="7"
-                     Grid.ColumnSpan="2"
-                     x:Name="LogBox"
-                     IsReadOnly="True"
-                     AcceptsReturn="True"
-                     TextWrapping="Wrap"
-                     ScrollViewer.VerticalScrollBarVisibility="Auto" />
+              <Grid Grid.Row="1" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                <TextBox x:Name="OutputPathBox" Watermark="Select output folder..." IsReadOnly="True" />
+                <Button Grid.Column="1" x:Name="BrowseOutputButton" Classes="action-button" Content="Browse folder" Click="BrowseOutput_Click" />
+              </Grid>
 
-            <TextBlock Grid.Row="8" Grid.ColumnSpan="2" Opacity="0.65" Text="Requires ffmpeg and ffprobe in PATH, or in a local tools/ffmpeg folder beside the executable." />
+              <Grid Grid.Row="2" ColumnDefinitions="*,*" ColumnSpacing="6">
+                <RadioButton x:Name="FormatOriginalRadio"
+                             Classes="segment"
+                             GroupName="ExportFormat"
+                             Content="Original clips"
+                             IsChecked="True"
+                             IsCheckedChanged="ExportFormat_Changed"
+                             ToolTip.Tip="Export each selected clip as it is" />
+                <RadioButton Grid.Column="1"
+                             x:Name="FormatVerticalRadio"
+                             Classes="segment"
+                             GroupName="ExportFormat"
+                             Content="Vertical shorts (9:16)"
+                             IsCheckedChanged="ExportFormat_Changed"
+                             ToolTip.Tip="Turn each selected clip into a short, using the vertical studio layout. In the stacked layout each clip goes on top." />
+              </Grid>
+
+              <Grid Grid.Row="3" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                <CheckBox x:Name="ReencodeCheckBox"
+                          Content="Re-encode for exact cuts"
+                          VerticalAlignment="Center"
+                          ToolTip.Tip="Slower, but cuts land exactly on the chosen times. Without it, cuts snap to nearby keyframes." />
+                <Button Grid.Column="1" x:Name="SplitButton" Classes="accent action-button" Content="Export selected" Click="ExportSelected_Click" />
+              </Grid>
+            </Grid>
+          </Border>
+        </Grid>
+
+        <!-- Centre: the player -->
+        <Border Grid.Column="1" Classes="panel">
+          <Grid RowDefinitions="Auto,*,Auto" RowSpacing="12">
+            <Grid ColumnDefinitions="*,*" ColumnSpacing="6">
+              <RadioButton x:Name="VerticalModeRadio"
+                           Classes="segment"
+                           GroupName="PreviewMode"
+                           Content="Vertical studio"
+                           IsChecked="True"
+                           IsCheckedChanged="PreviewMode_Changed" />
+              <RadioButton Grid.Column="1"
+                           x:Name="ClipModeRadio"
+                           Classes="segment"
+                           GroupName="PreviewMode"
+                           Content="Clip preview"
+                           IsCheckedChanged="PreviewMode_Changed" />
+            </Grid>
+
+            <controls:PreviewCanvas Grid.Row="1" x:Name="PreviewSurface" />
+
+            <Grid Grid.Row="2" ColumnDefinitions="Auto,*,Auto,Auto,64" ColumnSpacing="10">
+              <Button x:Name="PlayPauseButton" Classes="icon-button" Click="PlayPause_Click" ToolTip.Tip="Play or pause (Space)" AutomationProperties.Name="Play or pause">
+                <Panel>
+                  <Path x:Name="PlayIcon" Data="M 0,0 L 10,6 L 0,12 Z" Fill="#E5ECF7" Margin="2,0,0,0" />
+                  <Path x:Name="PauseIcon" Data="M 0,0 H 3.5 V 12 H 0 Z M 6.5,0 H 10 V 12 H 6.5 Z" Fill="#E5ECF7" IsVisible="False" />
+                </Panel>
+              </Button>
+              <controls:SeekBar Grid.Column="1" x:Name="PositionBar" VerticalAlignment="Center" />
+              <TextBlock Grid.Column="2" x:Name="TimeText" Text="00:00 / 00:00" FontSize="12" Foreground="#C4CEDC" VerticalAlignment="Center" />
+              <Button Grid.Column="3" x:Name="MuteButton" Classes="icon-button flat" Click="Mute_Click" ToolTip.Tip="Mute the preview" AutomationProperties.Name="Mute the preview">
+                <Panel Width="16" Height="12">
+                  <Path Data="M 0,4 H 3 L 7,0.5 V 11.5 L 3,8 H 0 Z" Fill="#C4CEDC" />
+                  <Path x:Name="VolumeOnIcon" Data="M 9.5,3 C 11.2,4.6 11.2,7.4 9.5,9 M 11.8,1 C 14.8,3.9 14.8,8.1 11.8,11" Stroke="#C4CEDC" StrokeThickness="1.3" />
+                  <Path x:Name="VolumeOffIcon" Data="M 10,3.5 L 15,8.5 M 15,3.5 L 10,8.5" Stroke="#E8394A" StrokeThickness="1.4" IsVisible="False" />
+                </Panel>
+              </Button>
+              <controls:SeekBar Grid.Column="4" x:Name="VolumeBar" Value="1" VerticalAlignment="Center" ToolTip.Tip="Preview volume" />
+            </Grid>
           </Grid>
         </Border>
+
+        <!-- Right: settings for what is being previewed, and the activity log -->
+        <Grid Grid.Column="2" RowDefinitions="Auto,*" RowSpacing="12">
+          <Border Classes="panel">
+            <Panel>
+              <StackPanel x:Name="VerticalPanel" Spacing="10">
+                <TextBlock Classes="section" Text="VERTICAL SHORT  ·  1080 × 1920" />
+
+                <Grid ColumnDefinitions="*,*,*" ColumnSpacing="6">
+                  <RadioButton x:Name="LayoutStackedRadio"
+                               Classes="segment"
+                               GroupName="VerticalLayout"
+                               Content="Stacked"
+                               IsChecked="True"
+                               IsCheckedChanged="Layout_Changed"
+                               ToolTip.Tip="Two clips, one under the other" />
+                  <RadioButton Grid.Column="1"
+                               x:Name="LayoutFillRadio"
+                               Classes="segment"
+                               GroupName="VerticalLayout"
+                               Content="Fill"
+                               IsCheckedChanged="Layout_Changed"
+                               ToolTip.Tip="One clip, cropped to fill the whole frame" />
+                  <RadioButton Grid.Column="2"
+                               x:Name="LayoutBlurRadio"
+                               Classes="segment"
+                               GroupName="VerticalLayout"
+                               Content="Blur"
+                               IsCheckedChanged="Layout_Changed"
+                               ToolTip.Tip="The whole clip over a blurred copy of itself" />
+                </Grid>
+
+                <Border Classes="slot-row">
+                  <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                    <Border Width="11" Height="17" BorderBrush="#9CB7FF" BorderThickness="1.2" CornerRadius="2" VerticalAlignment="Center">
+                      <Border x:Name="TopSlotIconFill" VerticalAlignment="Top" Height="7" Background="#9CB7FF" />
+                    </Border>
+                    <StackPanel Grid.Column="1" Spacing="1" VerticalAlignment="Center">
+                      <TextBlock x:Name="TopSlotTitle" Text="Top clip" FontSize="11" Foreground="#7C8BA3" />
+                      <TextBlock x:Name="TopSlotText" Text="Drag a clip here" FontSize="12.5" TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                    <Button Grid.Column="2" x:Name="ClearTopButton" Classes="icon-button flat" Click="ClearTop_Click" ToolTip.Tip="Remove this clip" AutomationProperties.Name="Remove the top clip">
+                      <Path Data="M 0,0 L 8,8 M 8,0 L 0,8" Stroke="#AEB8C7" StrokeThickness="1.4" />
+                    </Button>
+                  </Grid>
+                </Border>
+
+                <Border x:Name="BottomSlotRow" Classes="slot-row">
+                  <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                    <Border Width="11" Height="17" BorderBrush="#9CB7FF" BorderThickness="1.2" CornerRadius="2" VerticalAlignment="Center">
+                      <Border VerticalAlignment="Bottom" Height="7" Background="#9CB7FF" />
+                    </Border>
+                    <StackPanel Grid.Column="1" Spacing="1" VerticalAlignment="Center">
+                      <TextBlock Text="Bottom clip" FontSize="11" Foreground="#7C8BA3" />
+                      <TextBlock x:Name="BottomSlotText" Text="Drag a clip here" FontSize="12.5" TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                    <Button Grid.Column="2" x:Name="ClearBottomButton" Classes="icon-button flat" Click="ClearBottom_Click" ToolTip.Tip="Remove this clip" AutomationProperties.Name="Remove the bottom clip">
+                      <Path Data="M 0,0 L 8,8 M 8,0 L 0,8" Stroke="#AEB8C7" StrokeThickness="1.4" />
+                    </Button>
+                  </Grid>
+                </Border>
+
+                <Button x:Name="SwapSlotsButton"
+                        Classes="action-button compact"
+                        Content="Swap top and bottom"
+                        HorizontalAlignment="Stretch"
+                        Click="SwapSlots_Click" />
+
+                <TextBlock Classes="label" Text="Sound from" />
+                <UniformGrid Rows="1" Margin="0,0,-6,0">
+                  <RadioButton x:Name="AudioTopRadio" Classes="segment" GroupName="VerticalAudio" Content="Top" IsChecked="True" Margin="0,0,6,0" IsCheckedChanged="Audio_Changed" />
+                  <RadioButton x:Name="AudioBottomRadio" Classes="segment" GroupName="VerticalAudio" Content="Bottom" Margin="0,0,6,0" IsCheckedChanged="Audio_Changed" />
+                  <RadioButton x:Name="AudioMixRadio" Classes="segment" GroupName="VerticalAudio" Content="Both" Margin="0,0,6,0" IsCheckedChanged="Audio_Changed" />
+                  <RadioButton x:Name="AudioMuteRadio" Classes="segment" GroupName="VerticalAudio" Content="Mute" Margin="0,0,6,0" IsCheckedChanged="Audio_Changed" />
+                </UniformGrid>
+
+                <TextBlock x:Name="StudioHintText" Classes="hint" />
+
+                <Button x:Name="ExportShortButton"
+                        Classes="accent action-button"
+                        Content="Export this short"
+                        HorizontalAlignment="Stretch"
+                        Click="ExportShort_Click" />
+              </StackPanel>
+
+              <StackPanel x:Name="ClipPanel" Spacing="10" IsVisible="False">
+                <TextBlock Classes="section" Text="CLIP PREVIEW" />
+                <StackPanel Spacing="2">
+                  <TextBlock x:Name="ClipTitleText" Text="No clip loaded" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                  <TextBlock x:Name="ClipRangeText" Classes="hint" Text="Press play on a clip in the list to watch it here." />
+                </StackPanel>
+
+                <TextBlock Classes="label" Text="Trim" />
+                <Grid ColumnDefinitions="*,*,Auto" ColumnSpacing="6">
+                  <Button x:Name="TrimStartButton"
+                          Classes="action-button compact"
+                          Content="Start here"
+                          HorizontalAlignment="Stretch"
+                          Click="TrimStart_Click"
+                          ToolTip.Tip="Make the clip begin at the current position" />
+                  <Button Grid.Column="1"
+                          x:Name="TrimEndButton"
+                          Classes="action-button compact"
+                          Content="End here"
+                          HorizontalAlignment="Stretch"
+                          Click="TrimEnd_Click"
+                          ToolTip.Tip="Make the clip end at the current position" />
+                  <Button Grid.Column="2"
+                          x:Name="TrimResetButton"
+                          Classes="action-button compact"
+                          Content="Reset"
+                          Click="TrimReset_Click"
+                          ToolTip.Tip="Restore the full clip" />
+                </Grid>
+                <TextBlock Classes="hint" Text="Pause where the clip should begin or end, then press Start here or End here." />
+
+                <TextBlock Classes="label" Text="Use in a vertical short" />
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="6">
+                  <Button x:Name="ClipToTopButton" Classes="action-button compact" Content="As top clip" HorizontalAlignment="Stretch" Click="ClipToTop_Click" />
+                  <Button Grid.Column="1" x:Name="ClipToBottomButton" Classes="action-button compact" Content="As bottom clip" HorizontalAlignment="Stretch" Click="ClipToBottom_Click" />
+                </Grid>
+              </StackPanel>
+            </Panel>
+          </Border>
+
+          <Border Grid.Row="1" Classes="panel">
+            <Grid RowDefinitions="Auto,Auto,*" RowSpacing="10">
+              <TextBlock Classes="section" Text="ACTIVITY" />
+              <ProgressBar Grid.Row="1" x:Name="ExportProgress" Minimum="0" Maximum="100" Height="8" MinHeight="8" CornerRadius="4" />
+              <TextBox Grid.Row="2"
+                       x:Name="LogBox"
+                       IsReadOnly="True"
+                       AcceptsReturn="True"
+                       TextWrapping="Wrap"
+                       FontSize="12"
+                       ScrollViewer.VerticalScrollBarVisibility="Auto" />
+            </Grid>
+          </Border>
+        </Grid>
       </Grid>
     </Grid>
+
+    <!-- The thumbnail that follows the pointer while a clip is dragged to the canvas -->
+    <Canvas IsHitTestVisible="False">
+      <Border x:Name="DragGhost"
+              IsVisible="False"
+              Padding="6"
+              CornerRadius="8"
+              Background="#E6151922"
+              BorderBrush="#3B82F6"
+              BorderThickness="1.5">
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <Border Width="80" Height="45" CornerRadius="4" ClipToBounds="True" Background="#0B0F16">
+            <Image x:Name="DragGhostImage" Stretch="UniformToFill" />
+          </Border>
+          <TextBlock x:Name="DragGhostText" VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,6,0" />
+        </StackPanel>
+      </Border>
+    </Canvas>
 
     <Border Classes="resize-vertical" Background="Transparent" Height="8" VerticalAlignment="Top" PointerPressed="ResizeTop_PointerPressed" />
     <Border Classes="resize-vertical" Background="Transparent" Height="8" VerticalAlignment="Bottom" PointerPressed="ResizeBottom_PointerPressed" />
