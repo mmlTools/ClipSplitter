@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using ClipSplitterApp.Captions;
 
 namespace ClipSplitterApp.Services;
 
@@ -8,7 +9,7 @@ public enum VerticalLayoutKind
     /// <summary>Two clips, one under the other.</summary>
     Stacked,
 
-    /// <summary>One clip cropped to fill the whole 9:16 frame.</summary>
+    /// <summary>One clip cropped to fill the whole frame.</summary>
     Fill,
 
     /// <summary>One clip shown whole, over a blurred copy of itself.</summary>
@@ -64,16 +65,29 @@ public readonly record struct RectD(double X, double Y, double Width, double Hei
 /// <summary>Where a slot sits on the canvas and which part of its clip it shows.</summary>
 public sealed record SlotPlacement(int Slot, RectD Dest, RectD? Crop);
 
-/// <summary>A vertical short: up to two clips arranged on a 1080x1920 canvas.</summary>
+/// <summary>A short: up to two clips arranged on a canvas of the chosen format, with optional captions.</summary>
 public sealed class VerticalComposition
 {
-    public const int CanvasWidth = 1080;
-    public const int CanvasHeight = 1920;
     public const double MinSplitRatio = 0.25;
     public const double MaxSplitRatio = 0.75;
 
     private readonly ClipSource?[] _slots = new ClipSource?[2];
     private readonly SlotFraming[] _framing = { new(), new() };
+
+    /// <summary>The shape and size of the exported short.</summary>
+    public OutputFormat Format { get; set; } = OutputFormat.Vertical;
+
+    public int CanvasWidth => Format.Width;
+
+    public int CanvasHeight => Format.Height;
+
+    public double CanvasAspect => Format.Aspect;
+
+    /// <summary>How captions look and where they sit. The words themselves belong to the clip being captioned.</summary>
+    public CaptionSettings Captions { get; private set; } = new();
+
+    /// <summary>The colour look of the short, and how it fades in and out.</summary>
+    public ShortEffects Effects { get; private set; } = new();
 
     public VerticalLayoutKind Layout { get; set; } = VerticalLayoutKind.Stacked;
 
@@ -164,6 +178,34 @@ public sealed class VerticalComposition
     }
 
     /// <summary>
+    /// The slot whose speech is captioned. Unless the user picked one, it is the clip that is
+    /// heard, and the top clip when both or neither are.
+    /// </summary>
+    public int CaptionSlot
+    {
+        get
+        {
+            if (SlotCount == 1)
+                return 0;
+
+            if (Captions.Slot is 0 or 1)
+                return Captions.Slot.Value;
+
+            if (Audio == VerticalAudioSource.Bottom)
+                return 1;
+
+            // With nothing to hear on top, the talking is most likely in the other clip.
+            return _slots[0] is { Info.HasAudio: false } && _slots[1] is { Info.HasAudio: true } ? 1 : 0;
+        }
+    }
+
+    /// <summary>The clip whose speech is captioned, if that slot is filled.</summary>
+    public ClipSource? CaptionClip => _slots[CaptionSlot];
+
+    /// <summary>The line captions centre on when placed in the middle: the divider of a stacked short.</summary>
+    public double? CaptionMiddle => Layout == VerticalLayoutKind.Stacked ? TopHeight : null;
+
+    /// <summary>
     /// The furthest a slot can usefully be zoomed. In the blur layout zooming stops once the clip
     /// covers the whole canvas, because past that point it is just the fill layout.
     /// </summary>
@@ -172,7 +214,7 @@ public sealed class VerticalComposition
         if (Layout != VerticalLayoutKind.Blur || _slots[slot] is not { } clip)
             return SlotFraming.MaxZoom;
 
-        const double canvasAspect = (double)CanvasWidth / CanvasHeight;
+        var canvasAspect = CanvasAspect;
         var aspect = clip.Info.AspectRatio;
         var fillZoom = aspect >= canvasAspect ? aspect / canvasAspect : canvasAspect / aspect;
         return Math.Clamp(fillZoom, SlotFraming.MinZoom, SlotFraming.MaxZoom);
@@ -192,9 +234,12 @@ public sealed class VerticalComposition
     {
         var copy = new VerticalComposition
         {
+            Format = Format,
             Layout = Layout,
             SplitRatio = SplitRatio,
-            Audio = Audio
+            Audio = Audio,
+            Captions = Captions.Clone(),
+            Effects = Effects.Clone()
         };
 
         for (var slot = 0; slot < 2; slot++)
@@ -233,7 +278,7 @@ public sealed class VerticalComposition
                 // Show the whole clip. Zooming grows it until it fills the canvas, cropping the overflow.
                 var aspect = _slots[0]?.Info.AspectRatio ?? 16d / 9d;
                 var zoom = Math.Clamp(_framing[0].Zoom, SlotFraming.MinZoom, SlotFraming.MaxZoom);
-                const double canvasAspect = (double)CanvasWidth / CanvasHeight;
+                var canvasAspect = CanvasAspect;
 
                 double width, height;
                 if (aspect >= canvasAspect)

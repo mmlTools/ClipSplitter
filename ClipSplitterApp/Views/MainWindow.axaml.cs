@@ -17,6 +17,7 @@ using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using ClipSplitterApp.Captions;
 using ClipSplitterApp.Controls;
 using ClipSplitterApp.Playback;
 using ClipSplitterApp.Services;
@@ -29,20 +30,27 @@ public partial class MainWindow : Window
     private const string FfmpegDownloadUrl = "https://ffmpeg.org/download.html";
     private const string ExportSelectedText = "Export selected";
     private const string ExportShortText = "Export this short";
-    private const string VerticalSuffix = "vertical";
+    private const string CancelExportText = "Cancel export";
     private const double DragThreshold = 6;
     private const int ThumbnailWorkers = 3;
     private const int MaxLogLength = 20000;
 
+    /// <summary>Height of the activity log while the vertical studio needs the room for its settings.</summary>
+    private const double CompactLogHeight = 96;
+
+    private static readonly string[] VideoPatterns = { "*.mp4", "*.mov", "*.mkv", "*.avi", "*.webm", "*.m4v", "*.flv", "*.ts" };
+
     private readonly ClipPlayer _player;
+    private readonly AppSettings _settings;
+    private readonly string? _settingsFile;
     private readonly VerticalComposition _composition = new();
     private readonly DispatcherTimer _segmentTimer = new() { Interval = TimeSpan.FromMilliseconds(350) };
     private readonly bool _ready;
 
-    private CancellationTokenSource? _exportCts;
-    private CancellationTokenSource? _previewCts;
+    private CancellationTokenSource? _workCts;
     private ClipPreviewItem? _clipItem;
     private PreviewMode _mode = PreviewMode.Vertical;
+    private StudioTab _studioTab = StudioTab.Layout;
     private bool _syncingUi;
     private bool _ffmpegDialogOpen;
     private double _volumeBeforeMute = 1;
@@ -52,17 +60,24 @@ public partial class MainWindow : Window
     private Point _dragStart;
     private bool _dragging;
 
-    public ObservableCollection<ClipPreviewItem> PreviewItems { get; } = new();
-
     public MainWindow()
         : this(null)
     {
     }
 
-    public MainWindow(string? startupFile)
+    /// <param name="startupFiles">Videos to load once the window is open.</param>
+    /// <param name="settingsFile">Where remembered choices are kept, or null for the usual place.</param>
+    public MainWindow(IReadOnlyList<string>? startupFiles, string? settingsFile = null)
     {
+        _settingsFile = settingsFile;
+        _settings = AppSettings.Load(settingsFile);
+
+        // The window's bindings read these as soon as it is built.
+        CaptionStyleTiles = CaptionStyle.Presets.Select(style => new CaptionStyleTile(style)).ToList();
+
         InitializeComponent();
         DataContext = this;
+        ApplySettings();
 
         Title = $"ClipSplitter {AppInfo.Version}";
         TitleText.Text = $"ClipSplitter {AppInfo.Version}  ·  long videos into shorts";
@@ -75,6 +90,7 @@ public partial class MainWindow : Window
         PreviewSurface.Player = _player;
         PreviewSurface.Composition = _composition;
         PreviewSurface.Mode = _mode;
+        PreviewSurface.CompositionEdited += OnCanvasEdited;
 
         PositionBar.Seeking += fraction => _player.Seek(_player.Duration * fraction);
         VolumeBar.Seeking += volume =>
@@ -83,10 +99,14 @@ public partial class MainWindow : Window
             UpdateVolumeIcon();
         };
 
-        _segmentTimer.Tick += async (_, _) =>
+        _segmentTimer.Tick += (_, _) =>
         {
             _segmentTimer.Stop();
-            await RefreshPreviewAsync();
+            if (_replanSource is { } source)
+            {
+                _replanSource = null;
+                PlanClips(source);
+            }
         };
 
         DragDrop.SetAllowDrop(this, true);
@@ -95,21 +115,33 @@ public partial class MainWindow : Window
         AddHandler(DragDrop.DropEvent, Window_Drop);
         AddHandler(KeyDownEvent, Window_KeyDown, RoutingStrategies.Tunnel);
 
+        Closing += (_, _) => SaveSettings();
+
         Closed += (_, _) =>
         {
             _segmentTimer.Stop();
-            _exportCts?.Cancel();
-            _previewCts?.Cancel();
+            _workCts?.Cancel();
+            StopWatchingObs();
+
+            foreach (var source in Sources)
+                source.Work?.Cancel();
+
             _player.Dispose();
+            _speech.Dispose();
         };
 
+        InitializeStudioControls();
+        InitializeCaptionControls();
+        InitializeEffectControls();
         _ready = true;
 
-        Log("Ready. Select a video, or drop one onto the window.");
-        UpdatePreviewSummary();
+        Log("Ready. Add videos, or drop them onto the window.");
+        ApplyPanelLayout();
+        UpdateSourcesUi();
         UpdateStudioPanel();
         UpdateClipPanel();
         UpdateTransport();
+        RefreshCaptions();
 
         Opened += async (_, _) =>
         {
@@ -118,264 +150,78 @@ public partial class MainWindow : Window
             if (!await FfmpegTools.IsAvailableAsync())
                 Log("FFmpeg was not found. Install FFmpeg and ffprobe and add them to PATH, or place them in a tools/ffmpeg folder beside the app.");
 
-            if (!string.IsNullOrWhiteSpace(startupFile) && File.Exists(startupFile))
-                await LoadSourceAsync(startupFile);
+            // Someone who had ClipSplitter picking up their OBS replays wants that again next time.
+            if (_settings.WatchObsReplays && _obsWatcher == null && ObsStudio.FindSetup() is { } obs)
+                ToggleObsWatch(obs);
+
+            var files = startupFiles?.Where(File.Exists).ToList();
+            if (files is { Count: > 0 })
+                await AddSourcesAsync(files);
         };
     }
 
-    // ---------------------------------------------------------------- Source video and clip list
-
-    private async void BrowseInput_Click(object? sender, RoutedEventArgs e)
+    /// <summary>Puts the remembered choices in place before the controls are set up from them.</summary>
+    private void ApplySettings()
     {
-        BrowseInputButton.Content = "Opening...";
-        BrowseInputButton.IsEnabled = false;
+        _composition.Format = OutputFormat.Custom(_settings.FormatWidth, _settings.FormatHeight);
 
-        try
-        {
-            var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
-            {
-                Title = "Select video",
-                AllowMultiple = false,
-                FileTypeFilter = new List<FilePickerFileType>
-                {
-                    new("Video files") { Patterns = new[] { "*.mp4", "*.mov", "*.mkv", "*.avi", "*.webm", "*.m4v" } },
-                    FilePickerFileTypes.All
-                }
-            });
+        var captions = _composition.Captions;
+        captions.Enabled = _settings.CaptionsEnabled;
+        captions.StyleId = CaptionStyle.Find(_settings.CaptionStyle).Id;
+        captions.Position = Enum.TryParse<CaptionPosition>(_settings.CaptionPosition, ignoreCase: true, out var position) && Enum.IsDefined(position)
+            ? position
+            : CaptionPosition.Bottom;
+        captions.Scale = double.IsFinite(_settings.CaptionScale)
+            ? Math.Clamp(_settings.CaptionScale, CaptionSettings.MinScale, CaptionSettings.MaxScale)
+            : 1;
+        captions.Accent = SkiaSharp.SKColor.TryParse(_settings.CaptionAccent ?? string.Empty, out var accent) ? accent : null;
+        captions.Uppercase = _settings.CaptionUppercase;
 
-            if (files.Count > 0 && files[0].TryGetLocalPath() is { } path)
-                await LoadSourceAsync(path);
-        }
-        finally
-        {
-            BrowseInputButton.Content = "Browse video";
-            BrowseInputButton.IsEnabled = _exportCts == null;
-        }
+        var effects = _composition.Effects;
+        effects.LookId = VideoLook.Find(_settings.Look).Id;
+        effects.FadeIn = _settings.FadeIn;
+        effects.FadeOut = _settings.FadeOut;
+        effects.FadeSeconds = double.IsFinite(_settings.FadeSeconds)
+            ? Math.Clamp(_settings.FadeSeconds, ShortEffects.MinFadeSeconds, ShortEffects.MaxFadeSeconds)
+            : MediumFadeSeconds;
+
+        // The window is not ready yet, so this sets the starting clip length without replanning anything.
+        SegmentSecondsBox.Value = Math.Clamp(_settings.SegmentSeconds, 1, 86400);
     }
 
-    private async void BrowseOutput_Click(object? sender, RoutedEventArgs e)
+    private void SaveSettings()
     {
-        BrowseOutputButton.Content = "Opening...";
-        BrowseOutputButton.IsEnabled = false;
+        var captions = _composition.Captions;
 
-        try
-        {
-            var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
-            {
-                Title = "Select output folder",
-                AllowMultiple = false
-            });
-
-            if (folders.Count > 0 && folders[0].TryGetLocalPath() is { } path)
-                OutputPathBox.Text = path;
-        }
-        finally
-        {
-            BrowseOutputButton.Content = "Browse folder";
-            BrowseOutputButton.IsEnabled = _exportCts == null;
-        }
+        _settings.SegmentSeconds = CurrentSegmentSeconds();
+        _settings.FormatWidth = _composition.CanvasWidth;
+        _settings.FormatHeight = _composition.CanvasHeight;
+        _settings.CaptionsEnabled = captions.Enabled;
+        _settings.CaptionStyle = captions.StyleId;
+        _settings.CaptionPosition = captions.Position.ToString();
+        _settings.CaptionScale = captions.Scale;
+        _settings.CaptionAccent = captions.Accent is { } accent ? $"#{accent.Red:X2}{accent.Green:X2}{accent.Blue:X2}" : null;
+        _settings.CaptionUppercase = captions.Uppercase;
+        _settings.SpeechModel = SelectedSpeechModel.Id;
+        _settings.SpeechLanguage = SelectedSpeechLanguage;
+        _settings.Look = _composition.Effects.LookId;
+        _settings.FadeIn = _composition.Effects.FadeIn;
+        _settings.FadeOut = _composition.Effects.FadeOut;
+        _settings.FadeSeconds = _composition.Effects.FadeSeconds;
+        _settings.WatchObsReplays = _obsWatcher != null;
+        _settings.Save(_settingsFile);
     }
 
-    private async Task LoadSourceAsync(string path)
+    private enum StudioTab
     {
-        InputPathBox.Text = path;
-        EnsureOutputFolder(path);
-        await RefreshPreviewAsync();
+        Layout,
+        Captions,
+        Style,
+        Effects
     }
 
-    /// <summary>Suggests an output folder next to the given video when none has been chosen yet.</summary>
-    private void EnsureOutputFolder(string videoFile)
-    {
-        if (string.IsNullOrWhiteSpace(OutputPathBox.Text))
-            OutputPathBox.Text = Path.Combine(Path.GetDirectoryName(videoFile) ?? Environment.CurrentDirectory, "split-output");
-    }
-
-    private void SegmentSecondsBox_ValueChanged(object? sender, NumericUpDownValueChangedEventArgs e)
-    {
-        if (!_ready)
-            return;
-
-        // Wait for the typing or spinning to settle before rebuilding the whole list.
-        _segmentTimer.Stop();
-        _segmentTimer.Start();
-    }
-
-    private async Task RefreshPreviewAsync()
-    {
-        var input = InputPathBox.Text?.Trim() ?? string.Empty;
-        var seconds = (int)(SegmentSecondsBox.Value ?? 30);
-
-        _previewCts?.Cancel();
-        var cts = new CancellationTokenSource();
-        _previewCts = cts;
-        var token = cts.Token;
-
-        // The clip in the player belongs to the list that is about to be replaced.
-        if (_clipItem != null)
-        {
-            _clipItem = null;
-            if (_mode == PreviewMode.Clip)
-                _player.Unload();
-
-            UpdateClipPanel();
-        }
-
-        try
-        {
-            if (!File.Exists(input) || seconds < 1)
-            {
-                ClearPreviewItems();
-                return;
-            }
-
-            PreviewSummaryText.Text = "Reading video...";
-            var info = await MediaProbe.ProbeAsync(input, token);
-            token.ThrowIfCancellationRequested();
-
-            ClearPreviewItems();
-            foreach (var segment in FfmpegClipSplitter.CreatePlan(info.Duration, seconds))
-            {
-                var item = new ClipPreviewItem(info, segment);
-                item.PropertyChanged += PreviewItem_PropertyChanged;
-                PreviewItems.Add(item);
-            }
-
-            Log($"{Path.GetFileName(input)}: {info.Width}x{info.Height}, {ClipFormat.Time(info.Duration)} long, {PreviewItems.Count} clip(s).");
-            UpdatePreviewSummary();
-            await LoadThumbnailsAsync(input, PreviewItems.ToList(), token);
-        }
-        catch (OperationCanceledException)
-        {
-        }
-        catch (Exception ex)
-        {
-            ClearPreviewItems();
-            await ReportErrorAsync(ex);
-        }
-        finally
-        {
-            if (_previewCts == cts)
-                _previewCts = null;
-
-            cts.Dispose();
-        }
-    }
-
-    private void ClearPreviewItems()
-    {
-        foreach (var item in PreviewItems)
-            item.PropertyChanged -= PreviewItem_PropertyChanged;
-
-        PreviewItems.Clear();
-        UpdatePreviewSummary();
-    }
-
-    private async Task LoadThumbnailsAsync(string input, IReadOnlyList<ClipPreviewItem> items, CancellationToken token)
-    {
-        var splitter = new FfmpegClipSplitter(Log);
-        var folder = GetThumbnailFolder(input);
-        using var gate = new SemaphoreSlim(ThumbnailWorkers);
-
-        async Task LoadAsync(ClipPreviewItem item)
-        {
-            await gate.WaitAsync(token);
-            try
-            {
-                var path = Path.Combine(folder, BuildThumbnailName(item.Segment));
-                if (!File.Exists(path))
-                {
-                    // Written under a temporary name so a cancelled run never leaves a broken thumbnail behind.
-                    var partial = path + ".part.jpg";
-                    await splitter.CreateThumbnailAsync(input, item.Segment, partial, token);
-                    File.Move(partial, path, overwrite: true);
-                }
-
-                token.ThrowIfCancellationRequested();
-                await using var stream = File.OpenRead(path);
-                item.Thumbnail = new Bitmap(stream);
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch
-            {
-                // A missing thumbnail is not worth interrupting the user for.
-            }
-            finally
-            {
-                gate.Release();
-            }
-        }
-
-        await Task.WhenAll(items.Select(LoadAsync));
-    }
-
-    private void SelectAll_Click(object? sender, RoutedEventArgs e)
-    {
-        foreach (var item in PreviewItems)
-            item.IsSelected = true;
-    }
-
-    private void ClearSelection_Click(object? sender, RoutedEventArgs e)
-    {
-        foreach (var item in PreviewItems)
-            item.IsSelected = false;
-    }
-
-    private void PreviewItem_PropertyChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        if (e.PropertyName == nameof(ClipPreviewItem.IsSelected))
-            UpdatePreviewSummary();
-    }
-
-    private void UpdatePreviewSummary()
-    {
-        var selected = PreviewItems.Count(item => item.IsSelected);
-        PreviewSummaryText.Text = PreviewItems.Count == 0
-            ? "No video loaded"
-            : $"{selected} of {PreviewItems.Count} clips selected";
-    }
-
-    private void PreviewList_SelectionChanged(object? sender, SelectionChangedEventArgs e)
-    {
-        // While the clip preview is open, clicking a row shows that clip.
-        if (_ready && _mode == PreviewMode.Clip && PreviewList.SelectedItem is ClipPreviewItem item && item != _clipItem)
-            ShowClip(item, autoPlay: false);
-    }
-
-    private void PlayClip_Click(object? sender, RoutedEventArgs e)
-    {
-        if (sender is Control { DataContext: ClipPreviewItem item })
-            ShowClip(item, autoPlay: true);
-    }
-
-    private void ClipRow_DoubleTapped(object? sender, TappedEventArgs e)
-    {
-        if (sender is not Control { DataContext: ClipPreviewItem item } row)
-            return;
-
-        // Double-clicking the checkbox or one of the row's buttons is not a request to play.
-        for (var visual = e.Source as Visual; visual != null && !ReferenceEquals(visual, row); visual = visual.GetVisualParent())
-        {
-            if (visual is Button)
-                return;
-        }
-
-        ShowClip(item, autoPlay: true);
-    }
-
-    private void SendToTop_Click(object? sender, RoutedEventArgs e)
-    {
-        if (sender is Control { DataContext: ClipPreviewItem item })
-            AssignSlot(0, item.ToClipSource());
-    }
-
-    private void SendToBottom_Click(object? sender, RoutedEventArgs e)
-    {
-        if (sender is Control { DataContext: ClipPreviewItem item })
-            AssignSlot(1, item.ToClipSource());
-    }
+    /// <summary>True while an export or caption job is running. Its button acts as Cancel meanwhile.</summary>
+    private bool IsBusy => _workCts != null;
 
     // ---------------------------------------------------------------- Dragging clips onto the canvas
 
@@ -454,7 +300,7 @@ public partial class MainWindow : Window
 
     private void Window_DragOver(object? sender, DragEventArgs e)
     {
-        if (!e.Data.Contains(DataFormats.Files) || _exportCts != null)
+        if (!e.Data.Contains(DataFormats.Files) || IsBusy)
         {
             e.DragEffects = DragDropEffects.None;
             return;
@@ -471,30 +317,33 @@ public partial class MainWindow : Window
         var slot = PreviewSurface.HitTestSlot(e.GetPosition(PreviewSurface));
         PreviewSurface.HighlightSlot = -1;
 
-        if (_exportCts != null)
+        if (IsBusy)
             return;
 
-        var path = e.Data.GetFiles()?
+        var paths = e.Data.GetFiles()?
             .Select(file => file.TryGetLocalPath())
-            .FirstOrDefault(candidate => candidate != null && File.Exists(candidate));
+            .Where(candidate => candidate != null && File.Exists(candidate))
+            .Select(candidate => candidate!)
+            .ToList();
 
-        if (path == null)
+        if (paths == null || paths.Count == 0)
             return;
 
-        // A file dropped on the vertical canvas goes straight into that slot; anywhere else it becomes the source video.
+        // A file dropped on the vertical canvas goes straight into that slot; anywhere else the files join the source videos.
         if (slot >= 0)
-            await AssignFileAsync(slot, path);
+            await AssignFileAsync(slot, paths[0]);
         else
-            await LoadSourceAsync(path);
+            await AddSourcesAsync(paths);
     }
 
     private async Task AssignFileAsync(int slot, string path)
     {
         try
         {
+            path = Path.GetFullPath(path);
             var info = await MediaProbe.ProbeAsync(path, CancellationToken.None);
             EnsureOutputFolder(path);
-            AssignSlot(slot, new ClipSource(path, TimeSpan.Zero, info.Duration, info, Path.GetFileName(path)));
+            AssignSlot(slot, new ClipSource(path, TimeSpan.Zero, info.Duration, info, "Whole video"));
         }
         catch (Exception ex)
         {
@@ -531,6 +380,10 @@ public partial class MainWindow : Window
         PreviewSurface.Mode = mode;
         VerticalPanel.IsVisible = mode == PreviewMode.Vertical;
         ClipPanel.IsVisible = mode == PreviewMode.Clip;
+        ApplyPanelLayout();
+
+        // Captions belong to the vertical canvas only.
+        RefreshCaptionScene();
 
         if (!load)
             return;
@@ -546,6 +399,21 @@ public partial class MainWindow : Window
             LoadClip(autoPlay: false);
             UpdateClipPanel();
         }
+    }
+
+    /// <summary>
+    /// The vertical studio has many settings and gets most of the right-hand column; the clip
+    /// preview has few, so the activity log takes the room instead.
+    /// </summary>
+    private void ApplyPanelLayout()
+    {
+        var studio = _mode == PreviewMode.Vertical;
+        var fill = new GridLength(1, GridUnitType.Star);
+
+        // The two rows trade places as the one that takes whatever height is left.
+        RightColumn.RowDefinitions[0].Height = studio ? fill : GridLength.Auto;
+        RightColumn.RowDefinitions[1].Height = studio ? GridLength.Auto : fill;
+        LogBox.Height = studio ? CompactLogHeight : double.NaN;
     }
 
     private void ShowClip(ClipPreviewItem item, bool autoPlay)
@@ -589,7 +457,7 @@ public partial class MainWindow : Window
             if (_composition.GetSlot(slot) is not { } clip)
                 continue;
 
-            layers[slot] = new PlaybackLayer(clip.File, clip.Start, clip.Length, clip.Info);
+            layers[slot] = new PlaybackLayer(clip.File, clip.Start, clip.Length, clip.Info, _composition.Effects.Look.Filter);
             any = true;
         }
 
@@ -648,6 +516,9 @@ public partial class MainWindow : Window
         PositionBar.IsEnabled = hasMedia;
         PositionBar.Value = duration > TimeSpan.Zero ? position / duration : 0;
         TimeText.Text = $"{ClipFormat.Time(position)} / {ClipFormat.Time(duration)}";
+
+        // Starting, stopping and seeking all change which caption the canvas should show.
+        UpdateCaptionMoment();
     }
 
     private void Window_KeyDown(object? sender, KeyEventArgs e)
@@ -655,8 +526,8 @@ public partial class MainWindow : Window
         if (e.Key != Key.Space || !_player.HasMedia)
             return;
 
-        // Space still types into text boxes and still presses a focused button.
-        if (FocusManager?.GetFocusedElement() is TextBox or Button)
+        // Space still types into text boxes, presses a focused button and opens a focused list.
+        if (FocusManager?.GetFocusedElement() is TextBox or Button or ComboBox or ComboBoxItem or Slider)
             return;
 
         _player.TogglePlay();
@@ -738,7 +609,95 @@ public partial class MainWindow : Window
             AssignSlot(1, item.ToClipSource());
     }
 
-    // ---------------------------------------------------------------- Vertical studio panel
+    // ---------------------------------------------------------------- Vertical studio: layout tab
+
+    private void InitializeStudioControls()
+    {
+        _syncingUi = true;
+
+        var formats = OutputFormat.Presets
+            .Select(format => new FormatChoice(format, format.Title, format.Platforms))
+            .ToList();
+        formats.Add(new FormatChoice(null, "Custom size", "any width and height"));
+
+        FormatBox.ItemsSource = formats;
+
+        // The format may have been remembered from last time; a size that is no preset is the custom one.
+        var current = formats.FirstOrDefault(choice => choice.Format == _composition.Format) ?? formats[^1];
+        FormatBox.SelectedItem = current;
+        CustomSizeRow.IsVisible = current.IsCustom;
+        CustomWidthBox.Value = _composition.CanvasWidth;
+        CustomHeightBox.Value = _composition.CanvasHeight;
+
+        _syncingUi = false;
+    }
+
+    private void StudioTab_Changed(object? sender, RoutedEventArgs e)
+    {
+        if (!_ready || _syncingUi || sender is not RadioButton { IsChecked: true } radio)
+            return;
+
+        _studioTab = ReferenceEquals(radio, CaptionsTabRadio) ? StudioTab.Captions
+            : ReferenceEquals(radio, StyleTabRadio) ? StudioTab.Style
+            : ReferenceEquals(radio, EffectsTabRadio) ? StudioTab.Effects
+            : StudioTab.Layout;
+
+        LayoutTab.IsVisible = _studioTab == StudioTab.Layout;
+        CaptionsTab.IsVisible = _studioTab == StudioTab.Captions;
+        StyleTab.IsVisible = _studioTab == StudioTab.Style;
+        EffectsTab.IsVisible = _studioTab == StudioTab.Effects;
+
+        // The style tab shows sample captions even before a clip has any of its own.
+        RefreshCaptions();
+    }
+
+    private void Format_Changed(object? sender, SelectionChangedEventArgs e)
+    {
+        if (!_ready || _syncingUi || FormatBox.SelectedItem is not FormatChoice choice)
+            return;
+
+        CustomSizeRow.IsVisible = choice.IsCustom;
+
+        if (choice.Format is { } format)
+        {
+            ApplyFormat(format);
+            return;
+        }
+
+        // The custom size starts from whatever was selected, so only what differs needs typing.
+        _syncingUi = true;
+        CustomWidthBox.Value = _composition.CanvasWidth;
+        CustomHeightBox.Value = _composition.CanvasHeight;
+        _syncingUi = false;
+    }
+
+    private void CustomSize_Changed(object? sender, NumericUpDownValueChangedEventArgs e)
+    {
+        if (!_ready || _syncingUi || FormatBox.SelectedItem is not FormatChoice { IsCustom: true })
+            return;
+
+        var width = (int)(CustomWidthBox.Value ?? _composition.CanvasWidth);
+        var height = (int)(CustomHeightBox.Value ?? _composition.CanvasHeight);
+        ApplyFormat(OutputFormat.Custom(width, height));
+    }
+
+    private void ApplyFormat(OutputFormat format)
+    {
+        if (_composition.Format == format)
+            return;
+
+        _composition.Format = format;
+
+        // How far the blur layout may zoom depends on the shape of the canvas.
+        for (var slot = 0; slot < 2; slot++)
+        {
+            var framing = _composition.GetFraming(slot);
+            framing.Zoom = Math.Min(framing.Zoom, _composition.GetMaxZoom(slot));
+        }
+
+        UpdateStudioPanel();
+        RefreshCaptions();
+    }
 
     private void AssignSlot(int slot, ClipSource clip)
     {
@@ -752,6 +711,7 @@ public partial class MainWindow : Window
         SetMode(PreviewMode.Vertical, load: false);
         UpdateStudioPanel();
         LoadComposition(keepPosition: false);
+        RefreshCaptions();
     }
 
     private void ClearTop_Click(object? sender, RoutedEventArgs e) => ClearSlot(0);
@@ -764,13 +724,20 @@ public partial class MainWindow : Window
         _composition.GetFraming(slot).Reset();
         UpdateStudioPanel();
         LoadComposition(keepPosition: true);
+        RefreshCaptions();
     }
 
     private void SwapSlots_Click(object? sender, RoutedEventArgs e)
     {
         _composition.SwapSlots();
+
+        // A caption source the user picked by hand follows its clip to the other half.
+        if (_composition.Captions.Slot is { } captioned)
+            _composition.Captions.Slot = 1 - captioned;
+
         UpdateStudioPanel();
         LoadComposition(keepPosition: true);
+        RefreshCaptions();
     }
 
     private void Layout_Changed(object? sender, RoutedEventArgs e)
@@ -791,6 +758,7 @@ public partial class MainWindow : Window
 
         UpdateStudioPanel();
         LoadComposition(keepPosition: true);
+        RefreshCaptions();
     }
 
     private void Audio_Changed(object? sender, RoutedEventArgs e)
@@ -804,11 +772,23 @@ public partial class MainWindow : Window
             : VerticalAudioSource.Top;
 
         LoadComposition(keepPosition: true);
+
+        // Unless the user chose otherwise, captions follow the clip that is heard.
+        RefreshCaptions();
+    }
+
+    /// <summary>The user moved the divider or reframed a clip on the canvas.</summary>
+    private void OnCanvasEdited()
+    {
+        // Captions in the middle sit on the divider, so they move with it.
+        if (_composition.Captions.Position == CaptionPosition.Middle && _composition.Layout == VerticalLayoutKind.Stacked)
+            RefreshCaptionScene();
     }
 
     private void UpdateStudioPanel()
     {
         var stacked = _composition.Layout == VerticalLayoutKind.Stacked;
+        var format = _composition.Format;
 
         _syncingUi = true;
 
@@ -830,7 +810,11 @@ public partial class MainWindow : Window
 
         _syncingUi = false;
 
-        TopSlotTitle.Text = stacked ? "Top clip" : "Clip";
+        StudioTitleText.Text = $"SHORT  ·  {format.Ratio}  ·  {format.SizeText}";
+        FormatVerticalRadio.Content = $"Shorts ({format.Ratio})";
+
+        TopSlotTitle.Text = SlotTitle(stacked ? "Top clip" : "Clip", _composition.Top);
+        BottomSlotTitle.Text = SlotTitle("Bottom clip", _composition.Bottom);
         TopSlotIconFill.Height = stacked ? 7 : 15;
         TopSlotText.Text = DescribeSlot(_composition.Top);
         BottomSlotText.Text = DescribeSlot(_composition.Bottom);
@@ -850,6 +834,10 @@ public partial class MainWindow : Window
         PreviewSurface.InvalidateVisual();
     }
 
+    /// <summary>The heading of a slot row, which names the video its clip was cut from.</summary>
+    private static string SlotTitle(string name, ClipSource? clip)
+        => clip == null ? name : $"{name}  ·  {Path.GetFileName(clip.File)}";
+
     private static string DescribeSlot(ClipSource? clip)
         => clip == null
             ? "Drag a clip here"
@@ -862,21 +850,26 @@ public partial class MainWindow : Window
         if (!_ready)
             return;
 
-        // Vertical shorts are always re-encoded, so the option only applies to original clips.
-        ReencodeCheckBox.IsEnabled = FormatOriginalRadio.IsChecked == true && _exportCts == null;
+        // Shorts are always re-encoded, so the option only applies to original clips.
+        ReencodeCheckBox.IsEnabled = FormatOriginalRadio.IsChecked == true && !IsBusy;
     }
 
     private async void ExportSelected_Click(object? sender, RoutedEventArgs e)
     {
-        if (CancelRunningExport())
+        if (CancelRunningWork())
             return;
 
-        var input = InputPathBox.Text?.Trim() ?? string.Empty;
         var output = OutputPathBox.Text?.Trim() ?? string.Empty;
 
-        if (!File.Exists(input))
+        if (_activeSource is not { } source)
         {
-            Log("ERROR: Select a source video first.");
+            Log("ERROR: Add a source video first.");
+            return;
+        }
+
+        if (!File.Exists(source.File))
+        {
+            Log($"ERROR: {source.Name} is no longer where it was. Remove it from the list and add it again.");
             return;
         }
 
@@ -886,7 +879,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        var items = PreviewItems.Where(item => item.IsSelected).ToList();
+        var items = source.Clips.Where(item => item.IsSelected).ToList();
         if (items.Count == 0)
         {
             Log("ERROR: Select at least one clip to export.");
@@ -895,7 +888,7 @@ public partial class MainWindow : Window
 
         if (FormatVerticalRadio.IsChecked != true)
         {
-            var options = new SplitOptions(input, output, ReencodeCheckBox.IsChecked == true, items.Select(item => item.ToSegment()).ToList());
+            var options = new SplitOptions(source.File, output, ReencodeCheckBox.IsChecked == true, items.Select(item => item.ToSegment()).ToList());
             await RunExportAsync(SplitButton, ExportSelectedText, output, async (progress, token) =>
             {
                 await new FfmpegClipSplitter(Log).SplitAsync(options, progress, token);
@@ -911,35 +904,35 @@ public partial class MainWindow : Window
             return;
         }
 
-        var sources = items.Select(item => item.ToClipSource()).ToList();
+        var clips = items.Select(item => item.ToClipSource()).ToList();
         await RunExportAsync(SplitButton, ExportSelectedText, output, async (progress, token) =>
         {
-            for (var index = 0; index < sources.Count; index++)
+            for (var index = 0; index < clips.Count; index++)
             {
                 token.ThrowIfCancellationRequested();
 
                 // Each selected clip takes the top slot of the studio layout in turn.
                 var composition = template.Clone();
-                composition.Top = sources[index];
+                composition.Top = clips[index];
 
                 // Numbered rather than overwritten, so a short that was framed by hand is never lost.
-                var source = sources[index];
+                var clip = clips[index];
                 var file = ClipFormat.UniquePath(Path.Combine(
                     output,
-                    ClipFormat.OutputFileName(source.File, source.Start, source.Start + composition.Duration, VerticalExporter.OutputExtension, VerticalSuffix)));
+                    ClipFormat.OutputFileName(clip.File, clip.Start, clip.Start + composition.Duration, VerticalExporter.OutputExtension, composition.Format.FileTag)));
 
                 Log($"Creating {Path.GetFileName(file)}");
                 var done = index;
-                await VerticalExporter.ExportAsync(composition, file, fraction => progress((done + fraction) / sources.Count * 100d), token);
+                await ExportShortAsync(composition, file, fraction => progress((done + fraction) / clips.Count * 100d), token);
             }
 
-            return sources.Count;
+            return clips.Count;
         });
     }
 
     private async void ExportShort_Click(object? sender, RoutedEventArgs e)
     {
-        if (CancelRunningExport())
+        if (CancelRunningWork())
             return;
 
         var composition = _composition.Clone();
@@ -965,51 +958,83 @@ public partial class MainWindow : Window
             return;
         }
 
-        var name = ClipFormat.OutputFileName(first.File, first.Start, first.Start + composition.Duration, VerticalExporter.OutputExtension, VerticalSuffix);
+        var name = ClipFormat.OutputFileName(first.File, first.Start, first.Start + composition.Duration, VerticalExporter.OutputExtension, composition.Format.FileTag);
 
         await RunExportAsync(ExportShortButton, ExportShortText, output, async (progress, token) =>
         {
             // Numbered rather than overwritten, so trying another layout keeps the earlier short.
             var file = ClipFormat.UniquePath(Path.Combine(output, name));
             Log($"Creating {Path.GetFileName(file)}");
-            await VerticalExporter.ExportAsync(composition, file, fraction => progress(fraction * 100d), token);
+            await ExportShortAsync(composition, file, fraction => progress(fraction * 100d), token);
             return 1;
         });
+
+        // An export can generate captions the panel does not know about yet.
+        RefreshCaptions();
     }
 
-    /// <summary>Stops the export in progress, if there is one. Both export buttons act as Cancel while it runs.</summary>
-    private bool CancelRunningExport()
+    /// <summary>Renders one short, generating its captions first when they are wanted and missing.</summary>
+    /// <param name="progress">Receives progress from 0 to 1.</param>
+    private async Task ExportShortAsync(VerticalComposition composition, string file, Action<double> progress, CancellationToken token)
     {
-        if (_exportCts == null)
+        // Listening to a clip takes a noticeable part of the time when it has to be done first.
+        const double listenShare = 0.35;
+
+        var needsListening = NeedsTranscript(composition);
+        var encodeFrom = needsListening ? listenShare : 0;
+
+        var captions = await BuildCaptionSceneAsync(composition, fraction => progress(fraction * listenShare), token);
+        await VerticalExporter.ExportAsync(composition, file, captions, fraction => progress(encodeFrom + fraction * (1 - encodeFrom)), token);
+    }
+
+    /// <summary>Stops the job in progress, if there is one. The button that started it acts as Cancel while it runs.</summary>
+    private bool CancelRunningWork()
+    {
+        if (_workCts == null)
             return false;
 
-        _exportCts.Cancel();
+        _workCts.Cancel();
         return true;
     }
 
     private async Task RunExportAsync(Button button, string idleText, string output, Func<Action<double>, CancellationToken, Task<int>> work)
     {
+        var completed = await RunWorkAsync(button, idleText, CancelExportText, async (progress, token) =>
+        {
+            Directory.CreateDirectory(output);
+            var count = await work(progress, token);
+            Log($"Done. Exported {count} file(s) to {output}");
+        });
+
+        if (completed)
+            await ShowDonationDialogAsync(output);
+    }
+
+    /// <summary>
+    /// Runs a long job with the progress bar, turning the button that started it into Cancel.
+    /// Returns true when the job finished, false when it failed or was cancelled.
+    /// </summary>
+    private async Task<bool> RunWorkAsync(Button button, string idleText, string cancelText, Func<Action<double>, CancellationToken, Task> work)
+    {
         var cts = new CancellationTokenSource();
-        _exportCts = cts;
+        _workCts = cts;
         var completed = false;
 
-        // ffmpeg reports progress from a background thread.
+        // ffmpeg and the speech recognizer report progress from background threads.
         void ReportProgress(double percent) => Dispatcher.UIThread.Post(() =>
         {
-            if (_exportCts == cts && percent > ExportProgress.Value)
+            if (_workCts == cts && percent > ExportProgress.Value)
                 ExportProgress.Value = percent;
         });
 
         _player.Pause();
         ExportProgress.Value = 0;
-        SetExportingState(button, idleText, true);
+        SetBusyState(button, idleText, cancelText, true);
 
         try
         {
-            Directory.CreateDirectory(output);
-            var count = await work(ReportProgress, cts.Token);
+            await work(ReportProgress, cts.Token);
             ExportProgress.Value = 100;
-            Log($"Done. Exported {count} file(s) to {output}");
             completed = true;
         }
         catch (OperationCanceledException)
@@ -1024,31 +1049,37 @@ public partial class MainWindow : Window
         }
         finally
         {
-            _exportCts = null;
+            _workCts = null;
             cts.Dispose();
-            SetExportingState(button, idleText, false);
+            SetBusyState(button, idleText, cancelText, false);
         }
 
-        if (completed)
-            await ShowDonationDialogAsync(output);
+        return completed;
     }
 
-    private void SetExportingState(Button activeButton, string idleText, bool isExporting)
+    private void SetBusyState(Button activeButton, string idleText, string cancelText, bool busy)
     {
-        activeButton.Content = isExporting ? "Cancel export" : idleText;
+        activeButton.Content = busy ? cancelText : idleText;
 
-        foreach (var button in new[] { SplitButton, ExportShortButton })
+        foreach (var button in new[] { SplitButton, ExportShortButton, GenerateCaptionsButton, ImportCaptionsButton })
         {
             if (!ReferenceEquals(button, activeButton))
-                button.IsEnabled = !isExporting;
+                button.IsEnabled = !busy;
         }
 
-        BrowseInputButton.IsEnabled = !isExporting;
-        BrowseOutputButton.IsEnabled = !isExporting;
-        SegmentSecondsBox.IsEnabled = !isExporting;
-        FormatOriginalRadio.IsEnabled = !isExporting;
-        FormatVerticalRadio.IsEnabled = !isExporting;
-        ReencodeCheckBox.IsEnabled = !isExporting && FormatOriginalRadio.IsChecked == true;
+        AddVideosButton.IsEnabled = !busy;
+        ObsButton.IsEnabled = !busy;
+        BrowseOutputButton.IsEnabled = !busy;
+        SegmentSecondsBox.IsEnabled = !busy;
+        FormatOriginalRadio.IsEnabled = !busy;
+        FormatVerticalRadio.IsEnabled = !busy;
+        ReencodeCheckBox.IsEnabled = !busy && FormatOriginalRadio.IsChecked == true;
+        CaptionLanguageBox.IsEnabled = !busy;
+        CaptionModelBox.IsEnabled = !busy;
+
+        // The caption buttons depend on more than whether a job is running.
+        if (!busy)
+            UpdateCaptionPanel();
     }
 
     // ---------------------------------------------------------------- Dialogs

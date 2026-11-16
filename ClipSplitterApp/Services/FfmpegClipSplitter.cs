@@ -11,6 +11,9 @@ public sealed class FfmpegClipSplitter
 {
     private static readonly HashSet<string> ReencodeContainers = new(StringComparer.OrdinalIgnoreCase) { ".mp4", ".mov", ".mkv", ".m4v" };
 
+    /// <summary>Anything shorter than this at the end of a video is joined to the clip before it.</summary>
+    private static readonly TimeSpan ShortestClip = TimeSpan.FromSeconds(0.5);
+
     private readonly Action<string> _log;
 
     public FfmpegClipSplitter(Action<string> log) => _log = log;
@@ -29,6 +32,16 @@ public sealed class FfmpegClipSplitter
             var end = TimeSpan.FromSeconds(Math.Min((index + 1d) * segmentSeconds, duration.TotalSeconds));
             if (end > start)
                 segments.Add(new ClipSegment(index, start, end));
+        }
+
+        // A file is often a few hundredths of a second longer than a whole number of clips,
+        // because its sound runs on a little after its picture. That sliver is no clip of its
+        // own; it belongs to the clip before it.
+        if (segments.Count > 1 && segments[^1].Length < ShortestClip)
+        {
+            var sliver = segments[^1];
+            segments.RemoveAt(segments.Count - 1);
+            segments[^1] = segments[^1] with { End = sliver.End };
         }
 
         return segments;

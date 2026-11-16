@@ -6,8 +6,13 @@ using Avalonia.Controls.Documents;
 using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using Avalonia.Platform;
+using Avalonia.Rendering.SceneGraph;
+using Avalonia.Skia;
+using ClipSplitterApp.Captions;
 using ClipSplitterApp.Playback;
 using ClipSplitterApp.Services;
+using SkiaSharp;
 
 namespace ClipSplitterApp.Controls;
 
@@ -16,7 +21,7 @@ public enum PreviewMode
     /// <summary>One clip, shown in its own shape.</summary>
     Clip,
 
-    /// <summary>The 9:16 canvas of the vertical studio.</summary>
+    /// <summary>The canvas of the vertical studio, in the shape of the chosen format.</summary>
     Vertical
 }
 
@@ -27,7 +32,6 @@ public enum PreviewMode
 /// </summary>
 public sealed class PreviewCanvas : Control
 {
-    private const double CanvasAspect = (double)VerticalComposition.CanvasWidth / VerticalComposition.CanvasHeight;
     private const double DividerGrab = 9;
     private const double CornerRadius = 12;
 
@@ -47,6 +51,8 @@ public sealed class PreviewCanvas : Control
 
     private ClipPlayer? _player;
     private VerticalComposition? _composition;
+    private CaptionScene? _captions;
+    private TimeSpan? _captionFreeze;
     private PreviewMode _mode = PreviewMode.Vertical;
     private int _highlightSlot = -1;
     private DragKind _drag;
@@ -118,6 +124,31 @@ public sealed class PreviewCanvas : Control
         }
     }
 
+    /// <summary>Captions to draw over the vertical canvas, laid out for the composition's format, or null for none.</summary>
+    public CaptionScene? Captions
+    {
+        get => _captions;
+        set
+        {
+            _captions = value;
+            InvalidateVisual();
+        }
+    }
+
+    /// <summary>
+    /// When set, the captions are shown as they look at this moment instead of following the
+    /// player. Used for the sample text that stands in before a clip has captions of its own.
+    /// </summary>
+    public TimeSpan? CaptionFreeze
+    {
+        get => _captionFreeze;
+        set
+        {
+            _captionFreeze = value;
+            InvalidateVisual();
+        }
+    }
+
     /// <summary>Shown in clip mode while nothing is loaded.</summary>
     public string EmptyClipText { get; set; } = "Press play on a clip to preview it here";
 
@@ -127,7 +158,7 @@ public sealed class PreviewCanvas : Control
         if (_mode != PreviewMode.Vertical || _composition == null)
             return -1;
 
-        var phone = GetPhoneRect();
+        var phone = GetCanvasRect();
         if (!phone.Contains(point))
             return -1;
 
@@ -219,7 +250,7 @@ public sealed class PreviewCanvas : Control
 
             case DragKind.Divider:
             {
-                var phone = GetPhoneRect();
+                var phone = GetCanvasRect();
                 var ratio = (position.Y - phone.Y) / phone.Height;
                 if (Math.Abs(ratio - 0.5) < 0.012)
                     ratio = 0.5;
@@ -293,7 +324,7 @@ public sealed class PreviewCanvas : Control
         if (placement?.Crop is not { } crop)
             return;
 
-        var scale = GetPhoneRect().Width / VerticalComposition.CanvasWidth;
+        var scale = GetCanvasRect().Width / _composition.CanvasWidth;
         var pixelsPerSourcePixel = placement.Dest.Width * scale / crop.Width;
         if (pixelsPerSourcePixel <= 0)
             return;
@@ -325,24 +356,27 @@ public sealed class PreviewCanvas : Control
         if (_composition is not { Layout: VerticalLayoutKind.Stacked })
             return false;
 
-        var phone = GetPhoneRect();
+        var phone = GetCanvasRect();
         return position.X >= phone.X
                && position.X <= phone.Right
                && Math.Abs(position.Y - GetDividerY(phone)) <= DividerGrab;
     }
 
     private double GetDividerY(Rect phone)
-        => phone.Y + (_composition?.TopHeight ?? VerticalComposition.CanvasHeight / 2) * phone.Height / VerticalComposition.CanvasHeight;
+        => _composition == null
+            ? phone.Y + phone.Height / 2
+            : phone.Y + _composition.TopHeight * phone.Height / _composition.CanvasHeight;
 
-    /// <summary>The largest 9:16 rectangle that fits in the control.</summary>
-    private Rect GetPhoneRect()
+    /// <summary>The largest rectangle in the shape of the chosen format that fits in the control.</summary>
+    private Rect GetCanvasRect()
     {
+        var aspect = _composition?.CanvasAspect ?? OutputFormat.Vertical.Aspect;
         var height = Bounds.Height;
-        var width = height * CanvasAspect;
+        var width = height * aspect;
         if (width > Bounds.Width)
         {
             width = Bounds.Width;
-            height = width / CanvasAspect;
+            height = width / aspect;
         }
 
         return new Rect(Math.Round((Bounds.Width - width) / 2), Math.Round((Bounds.Height - height) / 2), Math.Round(width), Math.Round(height));
@@ -369,7 +403,7 @@ public sealed class PreviewCanvas : Control
 
     private void RenderVertical(DrawingContext context)
     {
-        var phone = GetPhoneRect();
+        var phone = GetCanvasRect();
         var composition = _composition;
 
         using (context.PushClip(new RoundedRect(phone, CornerRadius)))
@@ -378,12 +412,12 @@ public sealed class PreviewCanvas : Control
 
             if (composition != null)
             {
-                var scale = phone.Width / VerticalComposition.CanvasWidth;
+                var scale = phone.Width / composition.CanvasWidth;
 
                 if (composition.Layout == VerticalLayoutKind.Blur && composition.Top != null && _player?.GetSurface(0) is { } backdrop)
                 {
                     // Stretching the tiny averaged copy of the frame stands in for the exporter's blur.
-                    context.DrawImage(backdrop.Blur, Cover(backdrop.BlurWidth, backdrop.BlurHeight, CanvasAspect), phone);
+                    context.DrawImage(backdrop.Blur, Cover(backdrop.BlurWidth, backdrop.BlurHeight, composition.CanvasAspect), phone);
                     context.FillRectangle(BlurShadeBrush, phone);
                 }
 
@@ -411,6 +445,24 @@ public sealed class PreviewCanvas : Control
                     {
                         context.FillRectangle(EmptySlotBrush, dest);
                     }
+                }
+
+                // Captions go over the picture and under the editing handles, as they do in the export.
+                if (_captions is { IsEmpty: false } captions
+                    && captions.Width == composition.CanvasWidth
+                    && captions.Height == composition.CanvasHeight)
+                {
+                    var time = _captionFreeze ?? _player?.Position ?? TimeSpan.Zero;
+                    context.Custom(new CaptionDrawOperation(captions, time, phone, scale));
+                }
+
+                // Fades are shown while the short plays. At rest the picture stays in full view, so
+                // a fade-in does not leave a paused canvas black at its first frame.
+                if (_player is { IsPlaying: true } playing && composition.Effects.HasFades)
+                {
+                    var opacity = composition.Effects.OpacityAt(playing.Position, playing.Duration);
+                    if (opacity < 0.999)
+                        context.FillRectangle(new SolidColorBrush(Colors.Black, 1 - opacity), phone);
                 }
 
                 if (composition.Layout == VerticalLayoutKind.Stacked)
@@ -488,6 +540,53 @@ public sealed class PreviewCanvas : Control
         var top = area.Y + (area.Height - total) / 2;
         context.DrawText(titleText, new Point(area.X + 12, top));
         context.DrawText(hintText, new Point(area.X + 12, top + titleText.Height + 6));
+    }
+
+    /// <summary>
+    /// Draws captions with the same painter the exporter uses, straight onto the window's Skia
+    /// canvas. It runs on the render thread, so it only holds values that never change.
+    /// </summary>
+    private sealed class CaptionDrawOperation : ICustomDrawOperation
+    {
+        private readonly CaptionScene _scene;
+        private readonly TimeSpan _time;
+        private readonly double _scale;
+
+        public CaptionDrawOperation(CaptionScene scene, TimeSpan time, Rect area, double scale)
+        {
+            _scene = scene;
+            _time = time;
+            _scale = scale;
+            Bounds = area;
+        }
+
+        public Rect Bounds { get; }
+
+        public bool HitTest(Point p) => false;
+
+        // Never equal, so a new moment is always drawn afresh.
+        public bool Equals(ICustomDrawOperation? other) => false;
+
+        public void Dispose()
+        {
+        }
+
+        public void Render(ImmediateDrawingContext context)
+        {
+            // Only the Skia renderer can lend its canvas; any other simply shows no captions.
+            if (context.TryGetFeature<ISkiaSharpApiLeaseFeature>() is not { } feature)
+                return;
+
+            using var lease = feature.Lease();
+            var canvas = lease.SkCanvas;
+
+            canvas.Save();
+            canvas.ClipRect(new SKRect((float)Bounds.X, (float)Bounds.Y, (float)Bounds.Right, (float)Bounds.Bottom));
+            canvas.Translate((float)Bounds.X, (float)Bounds.Y);
+            canvas.Scale((float)_scale);
+            CaptionPainter.Draw(canvas, _scene, _time);
+            canvas.Restore();
+        }
     }
 
     /// <summary>Scales a picture to fit inside <paramref name="area"/> without cropping it.</summary>

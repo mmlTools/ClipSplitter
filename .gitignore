@@ -22,3 +22,7 @@ publish/
 
 Thumbs.db
 .DS_Store
+
+# Kept out of the repository on purpose
+THIRD-PARTY-NOTICES.md
+itch.io.md

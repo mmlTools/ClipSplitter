@@ -20,9 +20,46 @@ public sealed record MediaInfo(
     double FrameRate,
     string FrameRateArg,
     bool HasAudio,
-    bool HasNonSquarePixels)
+    bool HasNonSquarePixels,
+    string? ColorSpace = null,
+    string? ColorRange = null)
 {
     public double AspectRatio => Height > 0 ? (double)Width / Height : 16d / 9d;
+
+    /// <summary>
+    /// The matrix that turns colours into this video's YUV, in ffmpeg's naming. Untagged video is
+    /// treated the way players treat it: HD as BT.709, anything smaller as BT.601.
+    /// </summary>
+    public string ColorMatrixArg => ColorSpace switch
+    {
+        "bt709" => "bt709",
+        "smpte170m" or "bt470bg" => "smpte170m",
+        "bt2020nc" or "bt2020c" => "bt2020",
+        _ => Width >= 1280 || Height >= 720 ? "bt709" : "smpte170m"
+    };
+
+    /// <summary>"pc" for full-range video, otherwise "tv".</summary>
+    public string ColorRangeArg => ColorRange == "pc" ? "pc" : "tv";
+
+    /// <summary>The frame rate as a fraction, for streams that must stay exactly in step with the video.</summary>
+    public (int Numerator, int Denominator) FrameRateFraction
+    {
+        get
+        {
+            var parts = FrameRateArg.Split('/');
+            if (parts.Length == 2
+                && int.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out var numerator)
+                && int.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out var denominator)
+                && numerator > 0
+                && denominator > 0)
+                return (numerator, denominator);
+
+            if (int.TryParse(FrameRateArg, NumberStyles.Integer, CultureInfo.InvariantCulture, out var whole) && whole > 0)
+                return (whole, 1);
+
+            return (Math.Max(1, (int)Math.Round(FrameRate * 1000)), 1000);
+        }
+    }
 }
 
 public static class MediaProbe
@@ -102,7 +139,17 @@ public static class MediaProbe
             throw new InvalidOperationException("Could not detect video duration.");
 
         var (frameRate, frameRateArg) = ReadFrameRate(videoStream);
-        return new MediaInfo(file, duration, width, height, frameRate, frameRateArg, hasAudio, nonSquare);
+        return new MediaInfo(
+            file,
+            duration,
+            width,
+            height,
+            frameRate,
+            frameRateArg,
+            hasAudio,
+            nonSquare,
+            GetString(videoStream, "color_space"),
+            GetString(videoStream, "color_range"));
     }
 
     private static (double Value, string Arg) ReadFrameRate(JsonElement stream)

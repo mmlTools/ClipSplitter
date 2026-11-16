@@ -105,12 +105,24 @@ public static class FfmpegTools
     /// Runs an ffmpeg encode and reports progress from 0 to 1, measured against <paramref name="expectedDuration"/>.
     /// Cancelling the token stops ffmpeg straight away.
     /// </summary>
-    public static async Task RunFfmpegAsync(IEnumerable<string> arguments, TimeSpan expectedDuration, Action<double>? progress, CancellationToken token)
+    /// <param name="feedInput">
+    /// Writes the data ffmpeg reads from "pipe:0", when one of its inputs comes from this app.
+    /// It runs on a background thread and may block; it is stopped when ffmpeg exits.
+    /// </param>
+    public static async Task RunFfmpegAsync(
+        IEnumerable<string> arguments,
+        TimeSpan expectedDuration,
+        Action<double>? progress,
+        CancellationToken token,
+        Action<Stream, CancellationToken>? feedInput = null)
     {
+        // "-nostdin" only stops ffmpeg treating the keyboard as a remote control. It still reads "pipe:0".
         var args = new List<string> { "-hide_banner", "-nostdin", "-y", "-loglevel", "error", "-progress", "pipe:1", "-nostats" };
         args.AddRange(arguments);
 
-        using var process = Start("ffmpeg", args);
+        using var process = Start("ffmpeg", args, redirectInput: feedInput != null);
+        using var feedCancel = CancellationTokenSource.CreateLinkedTokenSource(token);
+        var feeding = feedInput == null ? Task.CompletedTask : Task.Run(() => Feed(process, feedInput, feedCancel.Token), CancellationToken.None);
         var error = new StringBuilder();
 
         process.OutputDataReceived += (_, e) =>
@@ -133,12 +145,98 @@ public static class FfmpegTools
         await using (token.Register(() => TryKill(process)))
             await process.WaitForExitAsync(CancellationToken.None);
 
+        // ffmpeg has gone, so whatever the feeder was still writing has nowhere to go.
+        feedCancel.Cancel();
+        Exception? feedFailure = null;
+        try
+        {
+            await feeding;
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            feedFailure = ex;
+        }
+
         token.ThrowIfCancellationRequested();
 
         if (process.ExitCode != 0)
             throw new InvalidOperationException($"ffmpeg failed. {error}".Trim());
 
+        // A feeder that broke leaves a file that looks finished but is missing what it was sending.
+        if (feedFailure != null)
+            throw new InvalidOperationException("The export stopped early: " + feedFailure.Message, feedFailure);
+
         progress?.Invoke(1);
+    }
+
+    private static void Feed(Process process, Action<Stream, CancellationToken> feedInput, CancellationToken token)
+    {
+        var input = process.StandardInput.BaseStream;
+        try
+        {
+            feedInput(input, token);
+        }
+        catch (IOException)
+        {
+            // ffmpeg closed its end: it has read all it wanted, or it stopped.
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+        finally
+        {
+            // Closing the pipe is what tells ffmpeg that this input has ended.
+            try
+            {
+                input.Close();
+            }
+            catch (IOException)
+            {
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+        }
+    }
+
+    /// <summary>
+    /// Runs ffmpeg and returns everything it writes to standard output as raw bytes. Used to
+    /// pull decoded sound out of a clip.
+    /// </summary>
+    public static async Task<byte[]> RunFfmpegToBytesAsync(IEnumerable<string> arguments, CancellationToken token)
+    {
+        var args = new List<string> { "-hide_banner", "-nostdin", "-loglevel", "error" };
+        args.AddRange(arguments);
+
+        using var process = Start("ffmpeg", args);
+        var error = new StringBuilder();
+        process.ErrorDataReceived += (_, e) => { if (e.Data != null) lock (error) error.AppendLine(e.Data); };
+        process.BeginErrorReadLine();
+
+        using var output = new MemoryStream();
+        await using (token.Register(() => TryKill(process)))
+        {
+            try
+            {
+                await process.StandardOutput.BaseStream.CopyToAsync(output, CancellationToken.None);
+            }
+            catch (IOException)
+            {
+                // The process was stopped while a read was in flight.
+            }
+
+            await process.WaitForExitAsync(CancellationToken.None);
+        }
+
+        token.ThrowIfCancellationRequested();
+
+        if (process.ExitCode != 0)
+            throw new InvalidOperationException($"ffmpeg failed. {error}".Trim());
+
+        return output.ToArray();
     }
 
     /// <summary>Returns true when ffmpeg and ffprobe can both be launched.</summary>

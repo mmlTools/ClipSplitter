@@ -2,6 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:views="clr-namespace:ClipSplitterApp.Views"
         xmlns:controls="clr-namespace:ClipSplitterApp.Controls"
+        xmlns:captions="clr-namespace:ClipSplitterApp.Captions"
         x:Class="ClipSplitterApp.Views.MainWindow"
         x:DataType="views:MainWindow"
         Title="ClipSplitter"
@@ -208,6 +209,158 @@
       <Setter Property="Background" Value="#213560" />
     </Style>
 
+    <!-- Source videos, shown as a row of chips -->
+    <Style Selector="ListBox.source-list">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="3" />
+    </Style>
+    <Style Selector="ListBox.source-list ListBoxItem">
+      <Setter Property="Padding" Value="9,0,3,0" />
+      <Setter Property="Margin" Value="0,0,4,0" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="Height" Value="26" />
+      <Setter Property="CornerRadius" Value="5" />
+      <Setter Property="Background" Value="#1A2130" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="ListBox.source-list ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#222B3D" />
+    </Style>
+    <Style Selector="ListBox.source-list ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#1D4ED8" />
+    </Style>
+    <Style Selector="ListBox.source-list ListBoxItem:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#2563EB" />
+    </Style>
+    <Style Selector="Button.chip-close">
+      <Setter Property="Width" Value="20" />
+      <Setter Property="Height" Value="20" />
+      <Setter Property="MinWidth" Value="20" />
+      <Setter Property="MinHeight" Value="20" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="CornerRadius" Value="10" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Focusable" Value="False" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.chip-close:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#33FFFFFF" />
+    </Style>
+
+    <!-- Drop-down lists -->
+    <Style Selector="ComboBox">
+      <Setter Property="Background" Value="#10141C" />
+      <Setter Property="Foreground" Value="#EDF2F7" />
+      <Setter Property="BorderBrush" Value="#2F394A" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="MinHeight" Value="32" />
+      <Setter Property="FontSize" Value="12.5" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="Cursor" Value="Hand" />
+    </Style>
+
+    <!-- Caption style tiles -->
+    <Style Selector="ListBox.style-tiles">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Margin" Value="0,0,-6,-6" />
+    </Style>
+    <Style Selector="ListBox.style-tiles ListBoxItem">
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Margin" Value="0,0,6,6" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="CornerRadius" Value="7" />
+      <Setter Property="BorderThickness" Value="2" />
+      <Setter Property="BorderBrush" Value="#2F394A" />
+      <Setter Property="Background" Value="#10141C" />
+      <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="ListBox.style-tiles ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#10141C" />
+      <Setter Property="BorderBrush" Value="#46566F" />
+    </Style>
+    <Style Selector="ListBox.style-tiles ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#10141C" />
+      <Setter Property="BorderBrush" Value="#3B82F6" />
+    </Style>
+
+    <!-- Caption text, one row per group of words -->
+    <Style Selector="ListBox.caption-lines">
+      <Setter Property="Background" Value="#10141C" />
+      <Setter Property="BorderBrush" Value="#2B3242" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Padding" Value="4" />
+    </Style>
+    <Style Selector="ListBox.caption-lines ListBoxItem">
+      <Setter Property="Padding" Value="2" />
+      <Setter Property="MinHeight" Value="0" />
+    </Style>
+    <Style Selector="ListBox.caption-lines ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="ListBox.caption-lines ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#141B2B" />
+    </Style>
+    <Style Selector="Button.time-chip">
+      <Setter Property="Width" Value="54" />
+      <Setter Property="MinWidth" Value="54" />
+      <Setter Property="MinHeight" Value="26" />
+      <Setter Property="Padding" Value="4,0" />
+      <Setter Property="CornerRadius" Value="5" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Foreground" Value="#7C8BA3" />
+      <Setter Property="FontSize" Value="11.5" />
+      <Setter Property="Focusable" Value="False" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.time-chip:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="#202838" />
+      <Setter Property="Foreground" Value="#E5ECF7" />
+    </Style>
+    <Style Selector="TextBox.caption-line">
+      <Setter Property="MinHeight" Value="26" />
+      <Setter Property="Padding" Value="7,4" />
+      <Setter Property="FontSize" Value="12.5" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+    </Style>
+
+    <!-- Colour swatches -->
+    <Style Selector="RadioButton.swatch">
+      <Setter Property="Width" Value="26" />
+      <Setter Property="Height" Value="26" />
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="Focusable" Value="False" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Panel Background="Transparent">
+            <Ellipse Stroke="{TemplateBinding BorderBrush}" StrokeThickness="2" />
+            <Ellipse Margin="5" Fill="{TemplateBinding Background}" Stroke="#40FFFFFF" StrokeThickness="1" />
+            <ContentPresenter Content="{TemplateBinding Content}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+          </Panel>
+        </ControlTemplate>
+      </Setter>
+    </Style>
+    <Style Selector="RadioButton.swatch:pointerover">
+      <Setter Property="BorderBrush" Value="#46566F" />
+    </Style>
+    <Style Selector="RadioButton.swatch:checked">
+      <Setter Property="BorderBrush" Value="#3B82F6" />
+    </Style>
+
     <!-- Window resize grips -->
     <Style Selector="Border.resize-horizontal">
       <Setter Property="Cursor" Value="SizeWestEast" />
@@ -262,13 +415,64 @@
           <Border Classes="panel">
             <Grid RowDefinitions="Auto,Auto,Auto,*" RowSpacing="10">
               <Grid ColumnDefinitions="*,Auto">
-                <TextBlock Classes="section" Text="SOURCE VIDEO" VerticalAlignment="Center" />
+                <TextBlock Classes="section" Text="SOURCE VIDEOS" VerticalAlignment="Center" />
                 <TextBlock Grid.Column="1" x:Name="PreviewSummaryText" FontSize="12" Foreground="#AEB8C7" VerticalAlignment="Center" />
               </Grid>
 
-              <Grid Grid.Row="1" ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                <TextBox x:Name="InputPathBox" Watermark="Select a video, or drop one here..." IsReadOnly="True" />
-                <Button Grid.Column="1" x:Name="BrowseInputButton" Classes="action-button" Content="Browse video" Click="BrowseInput_Click" />
+              <Grid Grid.Row="1" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                <Border Height="34"
+                        Background="#10141C"
+                        BorderBrush="#2F394A"
+                        BorderThickness="1"
+                        CornerRadius="6"
+                        ClipToBounds="True">
+                  <Panel>
+                    <TextBlock x:Name="SourcesEmptyText"
+                               Text="Add videos, or drop them here..."
+                               Foreground="#7C8BA3"
+                               Margin="10,0"
+                               VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis" />
+                    <ListBox x:Name="SourceList"
+                             Classes="source-list"
+                             ItemsSource="{Binding Sources}"
+                             SelectionChanged="SourceList_SelectionChanged"
+                             PointerWheelChanged="SourceList_PointerWheelChanged"
+                             ScrollViewer.HorizontalScrollBarVisibility="Hidden"
+                             ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                             AutomationProperties.Name="Source videos">
+                      <ListBox.ItemsPanel>
+                        <ItemsPanelTemplate>
+                          <StackPanel Orientation="Horizontal" />
+                        </ItemsPanelTemplate>
+                      </ListBox.ItemsPanel>
+                      <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="views:SourceVideo">
+                          <StackPanel Orientation="Horizontal" Spacing="4" Background="Transparent" ToolTip.Tip="{Binding Tip}">
+                            <TextBlock Text="{Binding Name}" FontSize="12.5" MaxWidth="170" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                            <Button Classes="chip-close" Click="RemoveSource_Click" ToolTip.Tip="Remove this video from the list" AutomationProperties.Name="Remove this video">
+                              <Path Data="M 0,0 L 7,7 M 7,0 L 0,7" Stroke="#C4CEDC" StrokeThickness="1.3" />
+                            </Button>
+                          </StackPanel>
+                        </DataTemplate>
+                      </ListBox.ItemTemplate>
+                    </ListBox>
+                  </Panel>
+                </Border>
+                <Button Grid.Column="1"
+                        x:Name="AddVideosButton"
+                        Classes="action-button"
+                        MinWidth="0"
+                        Content="Add videos"
+                        Click="AddVideos_Click"
+                        ToolTip.Tip="Load one or more videos. Each keeps its own clip length and its own list of clips." />
+                <Button Grid.Column="2"
+                        x:Name="ObsButton"
+                        Classes="action-button"
+                        MinWidth="0"
+                        Content="OBS replay"
+                        Click="ObsReplay_Click"
+                        ToolTip.Tip="Load a replay saved by the replay buffer of OBS Studio" />
               </Grid>
 
               <Grid Grid.Row="2" ColumnDefinitions="Auto,120,Auto,*,Auto,Auto" ColumnSpacing="8">
@@ -289,7 +493,6 @@
               <ListBox Grid.Row="3"
                        x:Name="PreviewList"
                        Classes="clip-list"
-                       ItemsSource="{Binding PreviewItems}"
                        SelectionChanged="PreviewList_SelectionChanged"
                        Background="#10141C"
                        BorderBrush="#2B3242"
@@ -366,9 +569,9 @@
                              x:Name="FormatVerticalRadio"
                              Classes="segment"
                              GroupName="ExportFormat"
-                             Content="Vertical shorts (9:16)"
+                             Content="Shorts (9:16)"
                              IsCheckedChanged="ExportFormat_Changed"
-                             ToolTip.Tip="Turn each selected clip into a short, using the vertical studio layout. In the stacked layout each clip goes on top." />
+                             ToolTip.Tip="Turn each selected clip into a short, using the format, layout and captions of the vertical studio. In the stacked layout each clip goes on top." />
               </Grid>
 
               <Grid Grid.Row="3" ColumnDefinitions="*,Auto" ColumnSpacing="8">
@@ -424,11 +627,92 @@
         </Border>
 
         <!-- Right: settings for what is being previewed, and the activity log -->
-        <Grid Grid.Column="2" RowDefinitions="Auto,*" RowSpacing="12">
+        <Grid Grid.Column="2" x:Name="RightColumn" RowDefinitions="*,Auto" RowSpacing="12">
           <Border Classes="panel">
             <Panel>
-              <StackPanel x:Name="VerticalPanel" Spacing="10">
-                <TextBlock Classes="section" Text="VERTICAL SHORT  ·  1080 × 1920" />
+              <Grid x:Name="VerticalPanel" RowDefinitions="Auto,Auto,*,Auto" RowSpacing="10">
+                <TextBlock x:Name="StudioTitleText" Classes="section" Text="SHORT  ·  9:16  ·  1080 × 1920" />
+
+                <Grid Grid.Row="1" ColumnDefinitions="*,*,*,*" ColumnSpacing="5">
+                  <RadioButton x:Name="LayoutTabRadio"
+                               Classes="segment"
+                               GroupName="StudioTab"
+                               Padding="2,6"
+                               FontSize="12"
+                               Content="Layout"
+                               IsChecked="True"
+                               IsCheckedChanged="StudioTab_Changed" />
+                  <RadioButton Grid.Column="1"
+                               x:Name="CaptionsTabRadio"
+                               Classes="segment"
+                               GroupName="StudioTab"
+                               Padding="2,6"
+                               FontSize="12"
+                               Content="Captions"
+                               IsCheckedChanged="StudioTab_Changed"
+                               ToolTip.Tip="Turn the speech of a clip into captions, and correct the text" />
+                  <RadioButton Grid.Column="2"
+                               x:Name="StyleTabRadio"
+                               Classes="segment"
+                               GroupName="StudioTab"
+                               Padding="2,6"
+                               FontSize="12"
+                               Content="Style"
+                               IsCheckedChanged="StudioTab_Changed"
+                               ToolTip.Tip="Choose how the captions look and where they sit" />
+                  <RadioButton Grid.Column="3"
+                               x:Name="EffectsTabRadio"
+                               Classes="segment"
+                               GroupName="StudioTab"
+                               Padding="2,6"
+                               FontSize="12"
+                               Content="Effects"
+                               IsCheckedChanged="StudioTab_Changed"
+                               ToolTip.Tip="Give the short a colour look, and fade it in and out" />
+                </Grid>
+
+                <Panel Grid.Row="2">
+                <ScrollViewer x:Name="LayoutTab" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <StackPanel Spacing="10" Margin="0,0,10,0">
+                <TextBlock Classes="label" Text="Format" Margin="0,0,0,-2" />
+                <ComboBox x:Name="FormatBox"
+                          MinHeight="46"
+                          SelectionChanged="Format_Changed"
+                          ToolTip.Tip="The shape and size of the exported short"
+                          AutomationProperties.Name="Format of the short">
+                  <ComboBox.ItemTemplate>
+                    <DataTemplate x:DataType="views:FormatChoice">
+                      <StackPanel Spacing="1">
+                        <TextBlock Text="{Binding Title}" />
+                        <TextBlock Text="{Binding Detail}" FontSize="11" Foreground="#7C8BA3" />
+                      </StackPanel>
+                    </DataTemplate>
+                  </ComboBox.ItemTemplate>
+                </ComboBox>
+                <Grid x:Name="CustomSizeRow" ColumnDefinitions="*,Auto,*" ColumnSpacing="8" IsVisible="False">
+                  <NumericUpDown x:Name="CustomWidthBox"
+                                 Minimum="240"
+                                 Maximum="4096"
+                                 Increment="2"
+                                 Value="1080"
+                                 FormatString="0"
+                                 ShowButtonSpinner="False"
+                                 ValueChanged="CustomSize_Changed"
+                                 ToolTip.Tip="Width in pixels"
+                                 AutomationProperties.Name="Width in pixels" />
+                  <TextBlock Grid.Column="1" Text="×" VerticalAlignment="Center" Foreground="#AEB8C7" />
+                  <NumericUpDown Grid.Column="2"
+                                 x:Name="CustomHeightBox"
+                                 Minimum="240"
+                                 Maximum="4096"
+                                 Increment="2"
+                                 Value="1920"
+                                 FormatString="0"
+                                 ShowButtonSpinner="False"
+                                 ValueChanged="CustomSize_Changed"
+                                 ToolTip.Tip="Height in pixels"
+                                 AutomationProperties.Name="Height in pixels" />
+                </Grid>
 
                 <Grid ColumnDefinitions="*,*,*" ColumnSpacing="6">
                   <RadioButton x:Name="LayoutStackedRadio"
@@ -460,7 +744,7 @@
                       <Border x:Name="TopSlotIconFill" VerticalAlignment="Top" Height="7" Background="#9CB7FF" />
                     </Border>
                     <StackPanel Grid.Column="1" Spacing="1" VerticalAlignment="Center">
-                      <TextBlock x:Name="TopSlotTitle" Text="Top clip" FontSize="11" Foreground="#7C8BA3" />
+                      <TextBlock x:Name="TopSlotTitle" Text="Top clip" FontSize="11" Foreground="#7C8BA3" TextTrimming="CharacterEllipsis" />
                       <TextBlock x:Name="TopSlotText" Text="Drag a clip here" FontSize="12.5" TextTrimming="CharacterEllipsis" />
                     </StackPanel>
                     <Button Grid.Column="2" x:Name="ClearTopButton" Classes="icon-button flat" Click="ClearTop_Click" ToolTip.Tip="Remove this clip" AutomationProperties.Name="Remove the top clip">
@@ -475,7 +759,7 @@
                       <Border VerticalAlignment="Bottom" Height="7" Background="#9CB7FF" />
                     </Border>
                     <StackPanel Grid.Column="1" Spacing="1" VerticalAlignment="Center">
-                      <TextBlock Text="Bottom clip" FontSize="11" Foreground="#7C8BA3" />
+                      <TextBlock x:Name="BottomSlotTitle" Text="Bottom clip" FontSize="11" Foreground="#7C8BA3" TextTrimming="CharacterEllipsis" />
                       <TextBlock x:Name="BottomSlotText" Text="Drag a clip here" FontSize="12.5" TextTrimming="CharacterEllipsis" />
                     </StackPanel>
                     <Button Grid.Column="2" x:Name="ClearBottomButton" Classes="icon-button flat" Click="ClearBottom_Click" ToolTip.Tip="Remove this clip" AutomationProperties.Name="Remove the bottom clip">
@@ -499,13 +783,196 @@
                 </UniformGrid>
 
                 <TextBlock x:Name="StudioHintText" Classes="hint" />
+                </StackPanel>
+                </ScrollViewer>
 
-                <Button x:Name="ExportShortButton"
+                <!-- Captions: where the words come from, and the words themselves -->
+                <Grid x:Name="CaptionsTab" RowDefinitions="Auto,*" RowSpacing="10" IsVisible="False">
+                  <StackPanel Spacing="8">
+                    <CheckBox x:Name="CaptionsEnabledBox"
+                              Content="Add captions to the short"
+                              IsCheckedChanged="CaptionsEnabled_Changed"
+                              ToolTip.Tip="Burns the captions into the exported short. When exporting many shorts, each one gets captions for its own speech." />
+
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+                      <Button x:Name="GenerateCaptionsButton"
+                              Classes="action-button compact"
+                              Content="Generate captions"
+                              HorizontalAlignment="Stretch"
+                              Click="GenerateCaptions_Click"
+                              ToolTip.Tip="Listens to the clip and writes down what is said. This runs on your computer; nothing is uploaded." />
+                      <Button Grid.Column="1"
+                              x:Name="ImportCaptionsButton"
+                              Classes="action-button compact"
+                              Content="Import .srt"
+                              Click="ImportCaptions_Click"
+                              ToolTip.Tip="Use a subtitle file made for the source video (.srt or .vtt) instead of speech recognition" />
+                    </Grid>
+
+                    <Grid ColumnDefinitions="5*,7*" ColumnSpacing="6">
+                      <ComboBox x:Name="CaptionLanguageBox"
+                                ToolTip.Tip="The language spoken in the clip"
+                                AutomationProperties.Name="Spoken language">
+                        <ComboBox.ItemTemplate>
+                          <DataTemplate x:DataType="captions:SpeechLanguage">
+                            <TextBlock Text="{Binding Name}" />
+                          </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                      </ComboBox>
+                      <ComboBox Grid.Column="1"
+                                x:Name="CaptionModelBox"
+                                SelectionChanged="CaptionModel_Changed"
+                                ToolTip.Tip="How carefully to listen. More accurate models are bigger downloads and take longer."
+                                AutomationProperties.Name="Recognition quality">
+                        <ComboBox.ItemTemplate>
+                          <DataTemplate x:DataType="captions:SpeechModel">
+                            <TextBlock Text="{Binding Title}" />
+                          </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                      </ComboBox>
+                    </Grid>
+
+                    <Grid x:Name="CaptionSlotRow" ColumnDefinitions="Auto,*,*" ColumnSpacing="6">
+                      <TextBlock Text="Speech from" FontSize="12" Foreground="#AEB8C7" VerticalAlignment="Center" Margin="0,0,2,0" />
+                      <RadioButton Grid.Column="1" x:Name="CaptionTopRadio" Classes="segment" GroupName="CaptionSlot" Content="Top clip" IsChecked="True" IsCheckedChanged="CaptionSlot_Changed" />
+                      <RadioButton Grid.Column="2" x:Name="CaptionBottomRadio" Classes="segment" GroupName="CaptionSlot" Content="Bottom clip" IsCheckedChanged="CaptionSlot_Changed" />
+                    </Grid>
+
+                    <TextBlock x:Name="CaptionStatusText" Classes="hint" />
+                  </StackPanel>
+
+                  <ListBox Grid.Row="1"
+                           x:Name="CaptionLinesList"
+                           Classes="caption-lines"
+                           ItemsSource="{Binding CaptionLines}"
+                           ScrollViewer.VerticalScrollBarVisibility="Auto"
+                           ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                           AutomationProperties.Name="Caption text">
+                    <ListBox.ItemTemplate>
+                      <DataTemplate x:DataType="views:CaptionLineItem">
+                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="2">
+                          <Button Classes="time-chip"
+                                  Content="{Binding TimeText}"
+                                  Click="CaptionLineTime_Click"
+                                  ToolTip.Tip="Jump to this line"
+                                  AutomationProperties.Name="Jump to this line" />
+                          <TextBox Grid.Column="1"
+                                   Classes="caption-line"
+                                   Text="{Binding Text}"
+                                   LostFocus="CaptionLine_LostFocus"
+                                   KeyDown="CaptionLine_KeyDown"
+                                   AutomationProperties.Name="Caption text" />
+                        </Grid>
+                      </DataTemplate>
+                    </ListBox.ItemTemplate>
+                  </ListBox>
+                </Grid>
+
+                <!-- Style: how the captions look -->
+                <ScrollViewer x:Name="StyleTab" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" IsVisible="False">
+                  <StackPanel Spacing="10" Margin="0,0,10,0">
+                    <TextBlock x:Name="StyleOffHintText"
+                               Classes="hint"
+                               Text="Captions are off. Turn them on in the Captions tab to add them to the short."
+                               IsVisible="False" />
+
+                    <ListBox x:Name="CaptionStyleList"
+                             Classes="style-tiles"
+                             ItemsSource="{Binding CaptionStyleTiles}"
+                             SelectionChanged="CaptionStyle_Changed"
+                             ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             AutomationProperties.Name="Caption style">
+                      <ListBox.ItemsPanel>
+                        <ItemsPanelTemplate>
+                          <UniformGrid Columns="2" />
+                        </ItemsPanelTemplate>
+                      </ListBox.ItemsPanel>
+                      <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="views:CaptionStyleTile">
+                          <Border CornerRadius="5" ClipToBounds="True" ToolTip.Tip="{Binding Name}" AutomationProperties.Name="{Binding Name}">
+                            <Panel>
+                              <Image Source="{Binding Sample}" Height="50" Stretch="UniformToFill" />
+                              <TextBlock Text="{Binding Name}"
+                                         FontSize="10"
+                                         Foreground="#C4CEDC"
+                                         Margin="6,3"
+                                         HorizontalAlignment="Left"
+                                         VerticalAlignment="Top" />
+                            </Panel>
+                          </Border>
+                        </DataTemplate>
+                      </ListBox.ItemTemplate>
+                    </ListBox>
+
+                    <TextBlock Classes="label" Text="Position" />
+                    <UniformGrid Rows="1" Margin="0,0,-6,0">
+                      <RadioButton x:Name="CaptionPositionTopRadio" Classes="segment" GroupName="CaptionPosition" Content="Top" Margin="0,0,6,0" IsCheckedChanged="CaptionPosition_Changed" />
+                      <RadioButton x:Name="CaptionPositionMiddleRadio" Classes="segment" GroupName="CaptionPosition" Content="Middle" Margin="0,0,6,0" IsCheckedChanged="CaptionPosition_Changed" ToolTip.Tip="The middle of the frame, or the divider when two clips are stacked" />
+                      <RadioButton x:Name="CaptionPositionBottomRadio" Classes="segment" GroupName="CaptionPosition" Content="Bottom" IsChecked="True" Margin="0,0,6,0" IsCheckedChanged="CaptionPosition_Changed" />
+                    </UniformGrid>
+
+                    <Grid ColumnDefinitions="Auto,*,40" ColumnSpacing="8">
+                      <TextBlock Text="Size" FontSize="12" Foreground="#AEB8C7" VerticalAlignment="Center" />
+                      <Slider Grid.Column="1"
+                              x:Name="CaptionSizeSlider"
+                              Minimum="60"
+                              Maximum="160"
+                              Value="100"
+                              TickFrequency="5"
+                              IsSnapToTickEnabled="True"
+                              VerticalAlignment="Center"
+                              ValueChanged="CaptionSize_Changed"
+                              AutomationProperties.Name="Caption size" />
+                      <TextBlock Grid.Column="2" x:Name="CaptionSizeText" Text="100%" FontSize="12" Foreground="#C4CEDC" VerticalAlignment="Center" TextAlignment="Right" />
+                    </Grid>
+
+                    <TextBlock x:Name="CaptionAccentLabel" Classes="label" Text="Colour" />
+                    <WrapPanel x:Name="CaptionAccentPanel" Orientation="Horizontal" />
+
+                    <CheckBox x:Name="CaptionCapsBox"
+                              Content="ALL CAPS"
+                              IsCheckedChanged="CaptionCaps_Changed" />
+                  </StackPanel>
+                </ScrollViewer>
+
+                <!-- Effects: the colour look of the short, and how it opens and closes -->
+                <ScrollViewer x:Name="EffectsTab" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" IsVisible="False">
+                  <StackPanel Spacing="10" Margin="0,0,10,0">
+                    <TextBlock Classes="label" Text="Look" Margin="0,0,0,-2" />
+                    <UniformGrid x:Name="LookPanel" Columns="3" Margin="0,0,-6,-6" />
+
+                    <TextBlock Classes="label" Text="Transitions" />
+                    <CheckBox x:Name="FadeInBox"
+                              Content="Fade in at the start"
+                              IsCheckedChanged="Fade_Changed"
+                              ToolTip.Tip="The short opens from black, with its sound rising" />
+                    <CheckBox x:Name="FadeOutBox"
+                              Content="Fade out at the end"
+                              IsCheckedChanged="Fade_Changed"
+                              ToolTip.Tip="The short closes to black, with its sound falling" />
+
+                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                      <TextBlock Text="Length" FontSize="12" Foreground="#AEB8C7" VerticalAlignment="Center" />
+                      <UniformGrid Grid.Column="1" Rows="1" Margin="0,0,-6,0">
+                        <RadioButton x:Name="FadeShortRadio" Classes="segment" GroupName="FadeLength" Content="Short" Margin="0,0,6,0" IsCheckedChanged="FadeLength_Changed" ToolTip.Tip="0.3 seconds" />
+                        <RadioButton x:Name="FadeMediumRadio" Classes="segment" GroupName="FadeLength" Content="Medium" IsChecked="True" Margin="0,0,6,0" IsCheckedChanged="FadeLength_Changed" ToolTip.Tip="0.6 seconds" />
+                        <RadioButton x:Name="FadeLongRadio" Classes="segment" GroupName="FadeLength" Content="Long" Margin="0,0,6,0" IsCheckedChanged="FadeLength_Changed" ToolTip.Tip="1 second" />
+                      </UniformGrid>
+                    </Grid>
+
+                    <TextBlock Classes="hint" Text="The look is shown on the canvas exactly as it will be exported. Fades show while the short is playing; the sound fades with the picture in the exported file." />
+                  </StackPanel>
+                </ScrollViewer>
+                </Panel>
+
+                <Button Grid.Row="3"
+                        x:Name="ExportShortButton"
                         Classes="accent action-button"
                         Content="Export this short"
                         HorizontalAlignment="Stretch"
                         Click="ExportShort_Click" />
-              </StackPanel>
+              </Grid>
 
               <StackPanel x:Name="ClipPanel" Spacing="10" IsVisible="False">
                 <TextBlock Classes="section" Text="CLIP PREVIEW" />

@@ -1,4 +1,3 @@
-using System.Linq;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
@@ -14,8 +13,8 @@ public partial class App : Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            // A video passed on the command line ("Open with", or dropped on the exe) is loaded at startup.
-            desktop.MainWindow = new MainWindow(desktop.Args?.FirstOrDefault());
+            // Videos passed on the command line ("Open with", or dropped on the exe) are loaded at startup.
+            desktop.MainWindow = new MainWindow(desktop.Args);
         }
 
         base.OnFrameworkInitializationCompleted();

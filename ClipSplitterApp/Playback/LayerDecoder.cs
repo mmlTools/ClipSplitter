@@ -50,6 +50,12 @@ internal sealed class LayerDecoder : IDisposable
         // start_time=0 repeats the first frame if the video track begins late, keeping frame
         // numbers in step with the clock.
         var filter = $"fps={FfmpegTools.ArgNumber(fps)}:start_time=0,scale={width}:{height}:flags=fast_bilinear,setsar=1";
+
+        // A look is applied to the small preview frame, where it costs next to nothing, with the
+        // same filter the exporter uses on the full-size picture.
+        if (!string.IsNullOrEmpty(layer.VideoFilter))
+            filter += "," + layer.VideoFilter;
+
         var args = new List<string> { "-hide_banner", "-nostdin", "-loglevel", "error" };
 
         // Hardware decoding starts slower and is no faster for ordinary video, so it is kept for

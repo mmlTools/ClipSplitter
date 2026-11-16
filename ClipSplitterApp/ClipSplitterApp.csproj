@@ -21,10 +21,21 @@
     <Content Include="app-icon.ico" />
   </ItemGroup>
 
+  <!-- Caption fonts are embedded so captions look the same on every system. Each font is under
+       the SIL Open Font License, whose text ships next to the app. -->
+  <ItemGroup>
+    <EmbeddedResource Include="Assets\Fonts\*.ttf" LogicalName="Fonts/%(Filename)%(Extension)" />
+    <Content Include="Assets\Fonts\OFL-*.txt" Link="licenses\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="11.3.2" />
     <PackageReference Include="Avalonia.Desktop" Version="11.3.2" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.2" />
     <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.2" />
+    <!-- Speech recognition for captions. It runs on this computer; the runtime package holds the
+         native whisper.cpp libraries for Windows, Linux and macOS. -->
+    <PackageReference Include="Whisper.net" Version="1.9.1" />
+    <PackageReference Include="Whisper.net.Runtime" Version="1.9.1" />
   </ItemGroup>
 </Project>
