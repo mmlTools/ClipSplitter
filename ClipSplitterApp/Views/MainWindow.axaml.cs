@@ -27,7 +27,6 @@ namespace ClipSplitterApp.Views;
 public partial class MainWindow : Window
 {
     private const string DonationUrl = "https://www.paypal.com/donate/?hosted_button_id=ZKTLLYY9ADWYQ";
-    private const string FfmpegDownloadUrl = "https://ffmpeg.org/download.html";
     private const string ExportSelectedText = "Export selected";
     private const string ExportShortText = "Export this short";
     private const string CancelExportText = "Cancel export";
@@ -147,12 +146,20 @@ public partial class MainWindow : Window
         {
             RemoveLegacyPreviewCache();
 
-            if (!await FfmpegTools.IsAvailableAsync())
-                Log("FFmpeg was not found. Install FFmpeg and ffprobe and add them to PATH, or place them in a tools/ffmpeg folder beside the app.");
+            var ffmpegFound = await FfmpegTools.IsAvailableAsync();
+            if (!ffmpegFound)
+                Log("FFmpeg was not found. The arrow button in the title bar shows how to install it.");
 
             // Someone who had ClipSplitter picking up their OBS replays wants that again next time.
             if (_settings.WatchObsReplays && _obsWatcher == null && ObsStudio.FindSetup() is { } obs)
                 ToggleObsWatch(obs);
+
+            if (!ffmpegFound)
+            {
+                // No video can be read without FFmpeg, so the install steps come up instead.
+                await ShowFfmpegGuideAsync();
+                return;
+            }
 
             var files = startupFiles?.Where(File.Exists).ToList();
             if (files is { Count: > 0 })
@@ -1088,18 +1095,8 @@ public partial class MainWindow : Window
     {
         Log("ERROR: " + ex.Message);
 
-        if (ex is not FfmpegNotFoundException || _ffmpegDialogOpen)
-            return;
-
-        _ffmpegDialogOpen = true;
-        try
-        {
-            await ShowFfmpegDownloadDialogAsync();
-        }
-        finally
-        {
-            _ffmpegDialogOpen = false;
-        }
+        if (ex is FfmpegNotFoundException)
+            await ShowFfmpegGuideAsync();
     }
 
     private async Task ShowDonationDialogAsync(string outputFolder)
@@ -1122,20 +1119,138 @@ public partial class MainWindow : Window
         await dialog.ShowDialog(this);
     }
 
-    private async Task ShowFfmpegDownloadDialogAsync()
+    /// <summary>Shows the step-by-step FFmpeg install tutorial. Only one copy is ever open.</summary>
+    private async Task ShowFfmpegGuideAsync()
     {
-        var dialog = CreateDialogWindow("FFmpeg required");
+        if (_ffmpegDialogOpen)
+            return;
 
-        var downloadButton = CreateDialogButton("Download FFmpeg", true);
-        downloadButton.Click += (_, _) => OpenWithShell(FfmpegDownloadUrl);
+        _ffmpegDialogOpen = true;
+        try
+        {
+            var dialog = CreateDialogWindow(FfmpegInstallGuide.Title);
+            dialog.Width = 480;
+            dialog.MinWidth = 480;
 
-        dialog.Content = CreateDialogContent(
-            dialog,
-            "FFmpeg required",
-            "Install FFmpeg and ffprobe, add them to PATH, or place them in a tools/ffmpeg folder beside the app.",
-            downloadButton);
+            var downloadButton = CreateDialogButton("Open the FFmpeg download page");
+            downloadButton.Click += (_, _) => OpenWithShell(FfmpegInstallGuide.DownloadUrl);
 
-        await dialog.ShowDialog(this);
+            var body = new StackPanel { Spacing = 16 };
+            body.Children.Add(CreateFfmpegSteps());
+            body.Children.Add(new TextBlock
+            {
+                Text = FfmpegInstallGuide.Fallback,
+                FontSize = 12.5,
+                Foreground = SolidColorBrush.Parse("#8a96a8"),
+                TextWrapping = TextWrapping.Wrap
+            });
+
+            dialog.Content = CreateDialogContent(dialog, FfmpegInstallGuide.Title, FfmpegInstallGuide.Intro, body, downloadButton);
+
+            await dialog.ShowDialog(this);
+        }
+        finally
+        {
+            _ffmpegDialogOpen = false;
+        }
+    }
+
+    private static Control CreateFfmpegSteps()
+    {
+        var panel = new StackPanel { Spacing = 12 };
+        var steps = FfmpegInstallGuide.Steps;
+
+        for (var index = 0; index < steps.Count; index++)
+        {
+            var number = new Border
+            {
+                Width = 24,
+                Height = 24,
+                CornerRadius = new CornerRadius(12),
+                Background = SolidColorBrush.Parse("#1b2b4d"),
+                VerticalAlignment = VerticalAlignment.Top,
+                Child = new TextBlock
+                {
+                    Text = (index + 1).ToString(),
+                    FontSize = 12,
+                    FontWeight = FontWeight.SemiBold,
+                    Foreground = SolidColorBrush.Parse("#9cb7ff"),
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center
+                }
+            };
+
+            var content = new StackPanel { Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
+            content.Children.Add(new TextBlock
+            {
+                Text = steps[index],
+                Foreground = SolidColorBrush.Parse("#e5ecf7"),
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 3, 0, 0)
+            });
+
+            if (index == FfmpegInstallGuide.CommandStep)
+                content.Children.Add(CreateCommandRow(FfmpegInstallGuide.Command));
+
+            Grid.SetColumn(content, 1);
+            panel.Children.Add(new Grid
+            {
+                ColumnDefinitions = new ColumnDefinitions("Auto,*"),
+                ColumnSpacing = 12,
+                Children = { number, content }
+            });
+        }
+
+        return panel;
+    }
+
+    /// <summary>A command in a box, with a button that puts it on the clipboard.</summary>
+    private static Control CreateCommandRow(string command)
+    {
+        var copyButton = CreateDialogButton("Copy", true);
+        copyButton.MinWidth = 84;
+        copyButton.Click += async (_, _) =>
+        {
+            try
+            {
+                if (GetTopLevel(copyButton)?.Clipboard is not { } clipboard)
+                    return;
+
+                await clipboard.SetTextAsync(command);
+                copyButton.Content = "Copied";
+                await Task.Delay(1500);
+                copyButton.Content = "Copy";
+            }
+            catch
+            {
+                // The clipboard is busy; the command can still be typed by hand.
+            }
+        };
+        Grid.SetColumn(copyButton, 1);
+
+        var box = new Border
+        {
+            Height = 36,
+            Padding = new Thickness(12, 0),
+            Background = SolidColorBrush.Parse("#10141c"),
+            BorderBrush = SolidColorBrush.Parse("#2f394a"),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(6),
+            Child = new SelectableTextBlock
+            {
+                Text = command,
+                FontFamily = new FontFamily("Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, monospace"),
+                Foreground = Brushes.White,
+                VerticalAlignment = VerticalAlignment.Center
+            }
+        };
+
+        return new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("*,Auto"),
+            ColumnSpacing = 8,
+            Children = { box, copyButton }
+        };
     }
 
     private static Window CreateDialogWindow(string title)
@@ -1156,6 +1271,10 @@ public partial class MainWindow : Window
     }
 
     private static Control CreateDialogContent(Window dialog, string title, string message, params Button[] buttons)
+        => CreateDialogContent(dialog, title, message, null, buttons);
+
+    /// <param name="body">Extra content shown between the message and the buttons, if any.</param>
+    private static Control CreateDialogContent(Window dialog, string title, string message, Control? body, params Button[] buttons)
     {
         var buttonPanel = new StackPanel
         {
@@ -1165,6 +1284,26 @@ public partial class MainWindow : Window
         foreach (var button in buttons)
             buttonPanel.Children.Add(button);
 
+        var content = new StackPanel
+        {
+            Spacing = 18,
+            Children =
+            {
+                CreateDialogHeader(dialog, title),
+                new TextBlock
+                {
+                    Text = message,
+                    Foreground = SolidColorBrush.Parse("#cbd5e1"),
+                    TextWrapping = TextWrapping.Wrap
+                }
+            }
+        };
+
+        if (body != null)
+            content.Children.Add(body);
+
+        content.Children.Add(buttonPanel);
+
         return new Border
         {
             Padding = new Thickness(22),
@@ -1172,21 +1311,7 @@ public partial class MainWindow : Window
             BorderBrush = SolidColorBrush.Parse("#334155"),
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(10),
-            Child = new StackPanel
-            {
-                Spacing = 18,
-                Children =
-                {
-                    CreateDialogHeader(dialog, title),
-                    new TextBlock
-                    {
-                        Text = message,
-                        Foreground = SolidColorBrush.Parse("#cbd5e1"),
-                        TextWrapping = TextWrapping.Wrap
-                    },
-                    buttonPanel
-                }
-            }
+            Child = content
         };
     }
 
@@ -1270,7 +1395,7 @@ public partial class MainWindow : Window
 
     private void SupportProject_Click(object? sender, RoutedEventArgs e) => OpenWithShell(DonationUrl);
 
-    private void OpenFfmpegDownload_Click(object? sender, RoutedEventArgs e) => OpenWithShell(FfmpegDownloadUrl);
+    private async void FfmpegGuide_Click(object? sender, RoutedEventArgs e) => await ShowFfmpegGuideAsync();
 
     private void ResizeTop_PointerPressed(object? sender, PointerPressedEventArgs e) => Resize(WindowEdge.North, e);
     private void ResizeBottom_PointerPressed(object? sender, PointerPressedEventArgs e) => Resize(WindowEdge.South, e);

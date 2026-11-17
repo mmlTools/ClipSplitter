@@ -389,7 +389,7 @@
           </StackPanel>
 
           <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="0" VerticalAlignment="Center">
-            <Button Classes="window-control" Click="OpenFfmpegDownload_Click" ToolTip.Tip="Download FFmpeg">
+            <Button Classes="window-control" Click="FfmpegGuide_Click" ToolTip.Tip="How to install FFmpeg" AutomationProperties.Name="How to install FFmpeg">
               <TextBlock Text="↓" FontSize="13" Foreground="#9CB7FF" />
             </Button>
             <Button Classes="window-control" Click="SupportProject_Click" ToolTip.Tip="Support the project">

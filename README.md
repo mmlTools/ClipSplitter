@@ -24,14 +24,30 @@ The canvas preview and the exporter share the same layout maths and the same cap
 ## Requirements
 
 - .NET 8 SDK (to build)
-- FFmpeg, with `ffmpeg` and `ffprobe` available in your system `PATH`
+- FFmpeg, with `ffmpeg` and `ffprobe` available in your system `PATH`. The steps are below.
 
-Alternative: place the binaries beside the built app:
+### Install FFmpeg
+
+FFmpeg is free. On Windows:
+
+1. Press **Win + R**.
+2. Type `winget install ffmpeg` and press Enter.
+3. Wait until the window closes by itself. If it asks a question first, type `Y` and press Enter.
+4. Restart ClipSplitter. Done.
+
+On macOS, open Terminal and run `brew install ffmpeg` (this needs [Homebrew](https://brew.sh)). On Linux, open a terminal and run `sudo apt install ffmpeg`, or install the `ffmpeg` package with your distribution's package manager. Then restart ClipSplitter.
+
+ClipSplitter shows these steps itself when it cannot find FFmpeg, and the arrow button in its title bar opens them again.
+
+If `winget` is not available, [download FFmpeg](https://ffmpeg.org/download.html) and place the programs in a `tools/ffmpeg` folder beside the app:
 
 ```text
-ClipSplitterApp/bin/Release/net8.0/<runtime>/tools/ffmpeg/ffmpeg.exe
-ClipSplitterApp/bin/Release/net8.0/<runtime>/tools/ffmpeg/ffprobe.exe
+ClipSplitterApp.exe
+tools/ffmpeg/ffmpeg.exe
+tools/ffmpeg/ffprobe.exe
 ```
+
+When running from source, the app is in `ClipSplitterApp/bin/Release/net8.0/<runtime>/`.
 
 On Linux/macOS, omit `.exe`. On those systems the preview plays its sound through `ffplay`, so keep it next to `ffmpeg`; without it the preview is silent. Exports are unaffected.
 
