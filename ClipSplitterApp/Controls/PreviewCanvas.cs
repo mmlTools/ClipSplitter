@@ -12,6 +12,7 @@ using Avalonia.Skia;
 using ClipSplitterApp.Captions;
 using ClipSplitterApp.Playback;
 using ClipSplitterApp.Services;
+using ClipSplitterApp.TextOverlays;
 using SkiaSharp;
 
 namespace ClipSplitterApp.Controls;
@@ -28,12 +29,16 @@ public enum PreviewMode
 /// <summary>
 /// Draws the player's frames. In vertical mode it lays the clips out exactly as the exporter
 /// will, and lets the user reframe them: drag a clip to move it, scroll to zoom, drag the
-/// divider to resize the halves, double-click to reset.
+/// divider to resize the halves, double-click to reset. While the text is being edited it can be
+/// dragged into place and resized by scrolling, too.
 /// </summary>
 public sealed class PreviewCanvas : Control
 {
     private const double DividerGrab = 9;
     private const double CornerRadius = 12;
+
+    /// <summary>A dragged text catches on the middle of the frame when it is within this share of the width.</summary>
+    private const double TextSnap = 0.02;
 
     private static readonly IBrush StageBrush = new SolidColorBrush(Color.Parse("#05070B"));
     private static readonly IBrush EmptySlotBrush = new SolidColorBrush(Color.Parse("#0B0F16"));
@@ -46,6 +51,8 @@ public sealed class PreviewCanvas : Control
     private static readonly IPen BorderPen = new Pen(new SolidColorBrush(Color.Parse("#2B3242")), 1);
     private static readonly IPen HighlightPen = new Pen(new SolidColorBrush(Color.Parse("#3B82F6")), 3);
     private static readonly IPen DashedPen = new Pen(new SolidColorBrush(Color.Parse("#3A465C")), 1.5, new DashStyle(new double[] { 4, 4 }, 0));
+    private static readonly IPen TextFramePen = new Pen(new SolidColorBrush(Color.Parse("#B33B82F6")), 1.5, new DashStyle(new double[] { 4, 3 }, 0));
+    private static readonly IPen GuidePen = new Pen(new SolidColorBrush(Color.Parse("#CC3B82F6")), 1);
     private static readonly Cursor DividerCursor = new(StandardCursorType.SizeNorthSouth);
     private static readonly Cursor MoveCursor = new(StandardCursorType.SizeAll);
 
@@ -53,6 +60,12 @@ public sealed class PreviewCanvas : Control
     private VerticalComposition? _composition;
     private CaptionScene? _captions;
     private TimeSpan? _captionFreeze;
+    private TextOverlayScene? _text;
+    private bool _textFreeze;
+    private bool _textEditable;
+    private bool _textSnapped;
+    private Point _textDragOrigin;
+    private Point _textDragPress;
     private PreviewMode _mode = PreviewMode.Vertical;
     private int _highlightSlot = -1;
     private DragKind _drag;
@@ -69,11 +82,18 @@ public sealed class PreviewCanvas : Control
     {
         None,
         Pan,
-        Divider
+        Divider,
+        Text
     }
 
     /// <summary>The user changed the framing or the split by interacting with the canvas.</summary>
     public event Action? CompositionEdited;
+
+    /// <summary>The user dragged the text. The argument is where its middle should go, in frame pixels.</summary>
+    public event Action<Point>? TextMoved;
+
+    /// <summary>The user scrolled over the text. The argument is how much larger it should get; below 1 is smaller.</summary>
+    public event Action<double>? TextResized;
 
     public ClipPlayer? Player
     {
@@ -149,6 +169,53 @@ public sealed class PreviewCanvas : Control
         }
     }
 
+    /// <summary>The text to draw over the vertical canvas, laid out for the composition's format, or null for none.</summary>
+    public TextOverlayScene? Text
+    {
+        get => _text;
+        set
+        {
+            _text = value;
+            InvalidateVisual();
+        }
+    }
+
+    /// <summary>
+    /// When set, the text is shown at full strength whatever the moment. A text that only shows
+    /// at the start of a short would otherwise be out of sight while it is being written.
+    /// </summary>
+    public bool TextFreeze
+    {
+        get => _textFreeze;
+        set
+        {
+            if (_textFreeze == value)
+                return;
+
+            _textFreeze = value;
+            InvalidateVisual();
+        }
+    }
+
+    /// <summary>True while the text can be dragged and resized on the canvas. Elsewhere a drag reframes the clip under it.</summary>
+    public bool TextEditable
+    {
+        get => _textEditable;
+        set
+        {
+            if (_textEditable == value)
+                return;
+
+            _textEditable = value;
+            if (!value && _drag == DragKind.Text)
+                _drag = DragKind.None;
+
+            _textSnapped = false;
+            Cursor = null;
+            InvalidateVisual();
+        }
+    }
+
     /// <summary>Shown in clip mode while nothing is loaded.</summary>
     public string EmptyClipText { get; set; } = "Press play on a clip to preview it here";
 
@@ -200,7 +267,15 @@ public sealed class PreviewCanvas : Control
         if (!point.Properties.IsLeftButtonPressed)
             return;
 
-        if (IsOverDivider(point.Position))
+        if (TextAt(point.Position) is { } text)
+        {
+            // The drag is measured from where it began, so the text follows the pointer exactly
+            // and can leave the middle of the frame again after catching on it.
+            _drag = DragKind.Text;
+            _textDragPress = point.Position;
+            _textDragOrigin = new Point(text.Bounds.MidX, text.Bounds.MidY);
+        }
+        else if (IsOverDivider(point.Position))
         {
             if (e.ClickCount >= 2)
             {
@@ -248,6 +323,25 @@ public sealed class PreviewCanvas : Control
                 UpdateCursor(position);
                 return;
 
+            case DragKind.Text:
+            {
+                var scale = GetCanvasRect().Width / _composition.CanvasWidth;
+                if (scale <= 0)
+                    return;
+
+                var centre = _textDragOrigin + (position - _textDragPress) / scale;
+                var middle = _composition.CanvasWidth / 2d;
+
+                // Text is centred far more often than not, so it catches on the middle of the frame.
+                _textSnapped = Math.Abs(centre.X - middle) < _composition.CanvasWidth * TextSnap;
+                if (_textSnapped)
+                    centre = new Point(middle, centre.Y);
+
+                TextMoved?.Invoke(centre);
+                InvalidateVisual();
+                return;
+            }
+
             case DragKind.Divider:
             {
                 var phone = GetCanvasRect();
@@ -275,14 +369,26 @@ public sealed class PreviewCanvas : Control
         if (_drag == DragKind.None)
             return;
 
-        _drag = DragKind.None;
+        EndDrag();
         e.Pointer.Capture(null);
     }
 
     protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e)
     {
         base.OnPointerCaptureLost(e);
+        EndDrag();
+    }
+
+    private void EndDrag()
+    {
         _drag = DragKind.None;
+
+        if (_textSnapped)
+        {
+            // The guide that marks the middle of the frame goes with the drag.
+            _textSnapped = false;
+            InvalidateVisual();
+        }
     }
 
     protected override void OnPointerWheelChanged(PointerWheelEventArgs e)
@@ -291,6 +397,13 @@ public sealed class PreviewCanvas : Control
 
         if (_mode != PreviewMode.Vertical || _composition == null)
             return;
+
+        if (TextAt(e.GetPosition(this)) != null)
+        {
+            TextResized?.Invoke(Math.Pow(1.08, e.Delta.Y));
+            e.Handled = true;
+            return;
+        }
 
         var slot = HitTestSlot(e.GetPosition(this));
         if (slot < 0 || _composition.GetSlot(slot) == null)
@@ -341,6 +454,12 @@ public sealed class PreviewCanvas : Control
 
     private void UpdateCursor(Point position)
     {
+        if (TextAt(position) != null)
+        {
+            Cursor = MoveCursor;
+            return;
+        }
+
         if (IsOverDivider(position))
         {
             Cursor = DividerCursor;
@@ -349,6 +468,36 @@ public sealed class PreviewCanvas : Control
 
         var slot = HitTestSlot(position);
         Cursor = slot >= 0 && _composition?.GetSlot(slot) != null ? MoveCursor : null;
+    }
+
+    /// <summary>The text for the composition's frame, if there is one to draw.</summary>
+    private TextOverlayScene? CurrentText
+        => _text is { IsEmpty: false } text
+           && _composition is { } composition
+           && text.Width == composition.CanvasWidth
+           && text.Height == composition.CanvasHeight
+            ? text
+            : null;
+
+    /// <summary>The text under a point of the control, while it can be edited there.</summary>
+    private TextOverlayScene? TextAt(Point position)
+    {
+        if (!_textEditable || _mode != PreviewMode.Vertical || CurrentText is not { } text)
+            return null;
+
+        // A text that has faded away while the short plays is not there to take hold of.
+        if (!_textFreeze && text.OpacityAt(_player?.Position ?? TimeSpan.Zero) <= 0)
+            return null;
+
+        return ToCanvas(text.GrabBounds).Contains(position) ? text : null;
+    }
+
+    /// <summary>Turns an area of the frame into the area of the control it is drawn at.</summary>
+    private Rect ToCanvas(SKRect area)
+    {
+        var phone = GetCanvasRect();
+        var scale = phone.Width / (_composition?.CanvasWidth ?? OutputFormat.Vertical.Width);
+        return new Rect(phone.X + area.Left * scale, phone.Y + area.Top * scale, area.Width * scale, area.Height * scale);
     }
 
     private bool IsOverDivider(Point position)
@@ -447,13 +596,20 @@ public sealed class PreviewCanvas : Control
                     }
                 }
 
-                // Captions go over the picture and under the editing handles, as they do in the export.
-                if (_captions is { IsEmpty: false } captions
-                    && captions.Width == composition.CanvasWidth
-                    && captions.Height == composition.CanvasHeight)
+                // Text and captions go over the picture and under the editing handles, in the
+                // order the export lays them on.
+                var text = CurrentText;
+                var captions = _captions is { IsEmpty: false } candidate
+                               && candidate.Width == composition.CanvasWidth
+                               && candidate.Height == composition.CanvasHeight
+                    ? candidate
+                    : null;
+
+                if (text != null || captions != null)
                 {
-                    var time = _captionFreeze ?? _player?.Position ?? TimeSpan.Zero;
-                    context.Custom(new CaptionDrawOperation(captions, time, phone, scale));
+                    var position = _player?.Position ?? TimeSpan.Zero;
+                    var textOpacity = text == null ? 0 : _textFreeze ? 1 : text.OpacityAt(position);
+                    context.Custom(new OverlayDrawOperation(text, textOpacity, captions, _captionFreeze ?? position, phone, scale));
                 }
 
                 // Fades are shown while the short plays. At rest the picture stays in full view, so
@@ -467,6 +623,18 @@ public sealed class PreviewCanvas : Control
 
                 if (composition.Layout == VerticalLayoutKind.Stacked)
                     DrawDivider(context, phone);
+
+                // A frame marks the text as something to take hold of. It is never exported.
+                if (_textEditable && text != null && _player is not { IsPlaying: true })
+                {
+                    context.DrawRectangle(null, TextFramePen, ToCanvas(text.GrabBounds).Inflate(3), 6, 6);
+
+                    if (_textSnapped)
+                    {
+                        var middle = Math.Round(phone.X + phone.Width / 2) + 0.5;
+                        context.DrawLine(GuidePen, new Point(middle, phone.Y), new Point(middle, phone.Bottom));
+                    }
+                }
 
                 if (_highlightSlot >= 0)
                     DrawHighlight(context, phone, composition);
@@ -543,18 +711,22 @@ public sealed class PreviewCanvas : Control
     }
 
     /// <summary>
-    /// Draws captions with the same painter the exporter uses, straight onto the window's Skia
-    /// canvas. It runs on the render thread, so it only holds values that never change.
+    /// Draws the text and the captions with the same painters the exporter uses, straight onto
+    /// the window's Skia canvas. It runs on the render thread, so it only holds values that never change.
     /// </summary>
-    private sealed class CaptionDrawOperation : ICustomDrawOperation
+    private sealed class OverlayDrawOperation : ICustomDrawOperation
     {
-        private readonly CaptionScene _scene;
+        private readonly TextOverlayScene? _text;
+        private readonly double _textOpacity;
+        private readonly CaptionScene? _captions;
         private readonly TimeSpan _time;
         private readonly double _scale;
 
-        public CaptionDrawOperation(CaptionScene scene, TimeSpan time, Rect area, double scale)
+        public OverlayDrawOperation(TextOverlayScene? text, double textOpacity, CaptionScene? captions, TimeSpan time, Rect area, double scale)
         {
-            _scene = scene;
+            _text = text;
+            _textOpacity = textOpacity;
+            _captions = captions;
             _time = time;
             _scale = scale;
             Bounds = area;
@@ -573,7 +745,7 @@ public sealed class PreviewCanvas : Control
 
         public void Render(ImmediateDrawingContext context)
         {
-            // Only the Skia renderer can lend its canvas; any other simply shows no captions.
+            // Only the Skia renderer can lend its canvas; any other simply shows no text or captions.
             if (context.TryGetFeature<ISkiaSharpApiLeaseFeature>() is not { } feature)
                 return;
 
@@ -584,7 +756,13 @@ public sealed class PreviewCanvas : Control
             canvas.ClipRect(new SKRect((float)Bounds.X, (float)Bounds.Y, (float)Bounds.Right, (float)Bounds.Bottom));
             canvas.Translate((float)Bounds.X, (float)Bounds.Y);
             canvas.Scale((float)_scale);
-            CaptionPainter.Draw(canvas, _scene, _time);
+
+            if (_text != null)
+                TextOverlayPainter.Draw(canvas, _text, _textOpacity);
+
+            if (_captions != null)
+                CaptionPainter.Draw(canvas, _captions, _time);
+
             canvas.Restore();
         }
     }

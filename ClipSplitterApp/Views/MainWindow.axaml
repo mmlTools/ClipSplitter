@@ -361,6 +361,24 @@
       <Setter Property="BorderBrush" Value="#3B82F6" />
     </Style>
 
+    <!-- The grips between the three panels: invisible at rest, a thin line under the pointer -->
+    <Style Selector="GridSplitter.panel-grip">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Cursor" Value="SizeWestEast" />
+      <Setter Property="Focusable" Value="False" />
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border Background="Transparent">
+            <Border Width="2" CornerRadius="1" Margin="0,8" HorizontalAlignment="Center" Background="{TemplateBinding Background}" />
+          </Border>
+        </ControlTemplate>
+      </Setter>
+    </Style>
+    <Style Selector="GridSplitter.panel-grip:pointerover">
+      <Setter Property="Background" Value="#3B82F6" />
+    </Style>
+
     <!-- Window resize grips -->
     <Style Selector="Border.resize-horizontal">
       <Setter Property="Cursor" Value="SizeWestEast" />
@@ -403,12 +421,29 @@
         </Grid>
       </Border>
 
-      <Grid Grid.Row="1" Margin="10,2,10,10" ColumnSpacing="12">
+      <!-- Three panels with a grip between each pair. Dragging a grip resizes its neighbours;
+           double-clicking one puts all three back to their usual widths. -->
+      <Grid Grid.Row="1" x:Name="PanelsGrid" Margin="10,2,10,10">
         <Grid.ColumnDefinitions>
           <ColumnDefinition Width="5*" MinWidth="420" />
+          <ColumnDefinition Width="12" />
           <ColumnDefinition Width="4*" MinWidth="320" />
-          <ColumnDefinition Width="320" />
+          <ColumnDefinition Width="12" />
+          <ColumnDefinition Width="320" MinWidth="320" MaxWidth="560" />
         </Grid.ColumnDefinitions>
+
+        <GridSplitter Grid.Column="1"
+                      Classes="panel-grip"
+                      ResizeDirection="Columns"
+                      DoubleTapped="PanelGrip_DoubleTapped"
+                      ToolTip.Tip="Drag to resize the panels. Double-click to reset."
+                      AutomationProperties.Name="Resize the clip list and the player" />
+        <GridSplitter Grid.Column="3"
+                      Classes="panel-grip"
+                      ResizeDirection="Columns"
+                      DoubleTapped="PanelGrip_DoubleTapped"
+                      ToolTip.Tip="Drag to resize the panels. Double-click to reset."
+                      AutomationProperties.Name="Resize the player and the settings" />
 
         <!-- Left: the source video and its clips -->
         <Grid Grid.Column="0" RowDefinitions="*,Auto" RowSpacing="12">
@@ -571,7 +606,7 @@
                              GroupName="ExportFormat"
                              Content="Shorts (9:16)"
                              IsCheckedChanged="ExportFormat_Changed"
-                             ToolTip.Tip="Turn each selected clip into a short, using the format, layout and captions of the vertical studio. In the stacked layout each clip goes on top." />
+                             ToolTip.Tip="Turn each selected clip into a short, using the format, layout, text and captions of the vertical studio. In the stacked layout each clip goes on top." />
               </Grid>
 
               <Grid Grid.Row="3" ColumnDefinitions="*,Auto" ColumnSpacing="8">
@@ -586,7 +621,7 @@
         </Grid>
 
         <!-- Centre: the player -->
-        <Border Grid.Column="1" Classes="panel">
+        <Border Grid.Column="2" Classes="panel">
           <Grid RowDefinitions="Auto,*,Auto" RowSpacing="12">
             <Grid ColumnDefinitions="*,*" ColumnSpacing="6">
               <RadioButton x:Name="VerticalModeRadio"
@@ -627,7 +662,7 @@
         </Border>
 
         <!-- Right: settings for what is being previewed, and the activity log -->
-        <Grid Grid.Column="2" x:Name="RightColumn" RowDefinitions="*,Auto" RowSpacing="12">
+        <Grid Grid.Column="4" x:Name="RightColumn" RowDefinitions="*,Auto" RowSpacing="12">
           <Border Classes="panel">
             <Panel>
               <Grid x:Name="VerticalPanel" RowDefinitions="Auto,Auto,*,Auto" RowSpacing="10">
@@ -650,16 +685,16 @@
                                FontSize="12"
                                Content="Captions"
                                IsCheckedChanged="StudioTab_Changed"
-                               ToolTip.Tip="Turn the speech of a clip into captions, and correct the text" />
+                               ToolTip.Tip="Turn the speech of a clip into captions, correct the text, and choose how the captions look" />
                   <RadioButton Grid.Column="2"
-                               x:Name="StyleTabRadio"
+                               x:Name="TextTabRadio"
                                Classes="segment"
                                GroupName="StudioTab"
                                Padding="2,6"
                                FontSize="12"
-                               Content="Style"
+                               Content="Text"
                                IsCheckedChanged="StudioTab_Changed"
-                               ToolTip.Tip="Choose how the captions look and where they sit" />
+                               ToolTip.Tip="Write a title or a hook over the short" />
                   <RadioButton Grid.Column="3"
                                x:Name="EffectsTabRadio"
                                Classes="segment"
@@ -668,7 +703,7 @@
                                FontSize="12"
                                Content="Effects"
                                IsCheckedChanged="StudioTab_Changed"
-                               ToolTip.Tip="Give the short a colour look, and fade it in and out" />
+                               ToolTip.Tip="Give the short a colour look, slow it down or speed it up, add a wave or a shake, and fade it in and out" />
                 </Grid>
 
                 <Panel Grid.Row="2">
@@ -786,9 +821,9 @@
                 </StackPanel>
                 </ScrollViewer>
 
-                <!-- Captions: where the words come from, and the words themselves -->
-                <Grid x:Name="CaptionsTab" RowDefinitions="Auto,*" RowSpacing="10" IsVisible="False">
-                  <StackPanel Spacing="8">
+                <!-- Captions: where the words come from, the words themselves, and how they look -->
+                <ScrollViewer x:Name="CaptionsTab" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" IsVisible="False">
+                  <StackPanel Spacing="10" Margin="0,0,10,0">
                     <CheckBox x:Name="CaptionsEnabledBox"
                               Content="Add captions to the short"
                               IsCheckedChanged="CaptionsEnabled_Changed"
@@ -839,10 +874,10 @@
                     </Grid>
 
                     <TextBlock x:Name="CaptionStatusText" Classes="hint" />
-                  </StackPanel>
 
-                  <ListBox Grid.Row="1"
-                           x:Name="CaptionLinesList"
+                  <!-- The text has a height of its own, so the look below it is always within reach. -->
+                  <ListBox x:Name="CaptionLinesList"
+                           MaxHeight="170"
                            Classes="caption-lines"
                            ItemsSource="{Binding CaptionLines}"
                            ScrollViewer.VerticalScrollBarVisibility="Auto"
@@ -866,14 +901,11 @@
                       </DataTemplate>
                     </ListBox.ItemTemplate>
                   </ListBox>
-                </Grid>
 
-                <!-- Style: how the captions look -->
-                <ScrollViewer x:Name="StyleTab" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" IsVisible="False">
-                  <StackPanel Spacing="10" Margin="0,0,10,0">
+                    <TextBlock Classes="section" Text="CAPTION STYLE" Margin="0,6,0,0" />
                     <TextBlock x:Name="StyleOffHintText"
                                Classes="hint"
-                               Text="Captions are off. Turn them on in the Captions tab to add them to the short."
+                               Text="Captions are off, so the canvas shows none. Tick the box at the top to see the style you pick."
                                IsVisible="False" />
 
                     <ListBox x:Name="CaptionStyleList"
@@ -936,11 +968,97 @@
                   </StackPanel>
                 </ScrollViewer>
 
+                <!-- Text: a title or a hook written over the short -->
+                <ScrollViewer x:Name="TextTab" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" IsVisible="False">
+                  <StackPanel Spacing="10" Margin="0,0,10,0">
+                    <TextBox x:Name="OverlayTextBox"
+                             Height="58"
+                             AcceptsReturn="True"
+                             TextWrapping="Wrap"
+                             FontSize="12.5"
+                             Watermark="Write a title or a hook..."
+                             TextChanged="OverlayText_Changed"
+                             ToolTip.Tip="The text shown over the short. Press Enter to start a new line. It is added to every short you export until you clear this box."
+                             AutomationProperties.Name="Text on the short" />
+                    <TextBlock Classes="hint" Text="Drag the text on the canvas to place it." Margin="0,-4,0,0" />
+
+                    <ListBox x:Name="TextStyleList"
+                             Classes="style-tiles"
+                             ItemsSource="{Binding TextStyleTiles}"
+                             SelectionChanged="TextStyle_Changed"
+                             ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             AutomationProperties.Name="Text style">
+                      <ListBox.ItemsPanel>
+                        <ItemsPanelTemplate>
+                          <UniformGrid Columns="2" />
+                        </ItemsPanelTemplate>
+                      </ListBox.ItemsPanel>
+                      <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="views:TextStyleTile">
+                          <Border CornerRadius="5" ClipToBounds="True" ToolTip.Tip="{Binding Name}" AutomationProperties.Name="{Binding Name}">
+                            <Panel>
+                              <Image Source="{Binding Sample}" Height="46" Stretch="UniformToFill" />
+                              <TextBlock Text="{Binding Name}"
+                                         FontSize="10"
+                                         Foreground="#C4CEDC"
+                                         Margin="6,3"
+                                         HorizontalAlignment="Left"
+                                         VerticalAlignment="Top" />
+                            </Panel>
+                          </Border>
+                        </DataTemplate>
+                      </ListBox.ItemTemplate>
+                    </ListBox>
+
+                    <Grid ColumnDefinitions="52,*" ColumnSpacing="8">
+                      <TextBlock Text="Position" FontSize="12" Foreground="#AEB8C7" VerticalAlignment="Center" />
+                      <UniformGrid Grid.Column="1" Rows="1" Margin="0,0,-6,0">
+                        <RadioButton x:Name="TextPositionTopRadio" Classes="segment" GroupName="TextPosition" Content="Top" IsChecked="True" Margin="0,0,6,0" IsCheckedChanged="TextPosition_Changed" />
+                        <RadioButton x:Name="TextPositionMiddleRadio" Classes="segment" GroupName="TextPosition" Content="Middle" Margin="0,0,6,0" IsCheckedChanged="TextPosition_Changed" ToolTip.Tip="The middle of the frame, or the divider when two clips are stacked" />
+                        <RadioButton x:Name="TextPositionBottomRadio" Classes="segment" GroupName="TextPosition" Content="Bottom" Margin="0,0,6,0" IsCheckedChanged="TextPosition_Changed" />
+                      </UniformGrid>
+                    </Grid>
+
+                    <Grid ColumnDefinitions="52,*,40" ColumnSpacing="8">
+                      <TextBlock Text="Size" FontSize="12" Foreground="#AEB8C7" VerticalAlignment="Center" />
+                      <Slider Grid.Column="1"
+                              x:Name="TextSizeSlider"
+                              Minimum="50"
+                              Maximum="200"
+                              Value="100"
+                              VerticalAlignment="Center"
+                              ValueChanged="TextSize_Changed"
+                              ToolTip.Tip="Scrolling over the text on the canvas resizes it as well"
+                              AutomationProperties.Name="Text size" />
+                      <TextBlock Grid.Column="2" x:Name="TextSizeText" Text="100%" FontSize="12" Foreground="#C4CEDC" VerticalAlignment="Center" TextAlignment="Right" />
+                    </Grid>
+
+                    <Grid ColumnDefinitions="52,*" ColumnSpacing="8">
+                      <TextBlock Text="Show" FontSize="12" Foreground="#AEB8C7" VerticalAlignment="Center" />
+                      <UniformGrid Grid.Column="1" Rows="1" Margin="0,0,-6,0">
+                        <RadioButton x:Name="TextShowAlwaysRadio" Classes="segment" GroupName="TextShow" Content="Always" IsChecked="True" Margin="0,0,6,0" IsCheckedChanged="TextShow_Changed" ToolTip.Tip="The text stays for the whole short" />
+                        <RadioButton x:Name="TextShowThreeRadio" Classes="segment" GroupName="TextShow" Content="First 3 s" Margin="0,0,6,0" IsCheckedChanged="TextShow_Changed" ToolTip.Tip="The text opens the short, then fades away after 3 seconds" />
+                        <RadioButton x:Name="TextShowFiveRadio" Classes="segment" GroupName="TextShow" Content="First 5 s" Margin="0,0,6,0" IsCheckedChanged="TextShow_Changed" ToolTip.Tip="The text opens the short, then fades away after 5 seconds" />
+                      </UniformGrid>
+                    </Grid>
+
+                    <TextBlock x:Name="TextAccentLabel" Classes="label" Text="Text colour" Margin="0,0,0,-2" />
+                    <WrapPanel x:Name="TextAccentPanel" Orientation="Horizontal" />
+                  </StackPanel>
+                </ScrollViewer>
+
                 <!-- Effects: the colour look of the short, and how it opens and closes -->
                 <ScrollViewer x:Name="EffectsTab" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" IsVisible="False">
                   <StackPanel Spacing="10" Margin="0,0,10,0">
                     <TextBlock Classes="label" Text="Look" Margin="0,0,0,-2" />
                     <UniformGrid x:Name="LookPanel" Columns="3" Margin="0,0,-6,-6" />
+
+                    <TextBlock Classes="label" Text="Speed" />
+                    <UniformGrid x:Name="SpeedPanel" Rows="1" Margin="0,0,-6,0" />
+
+                    <TextBlock Classes="label" Text="Effect" />
+                    <UniformGrid x:Name="EffectPanel" Columns="3" Margin="0,0,-6,-6" />
 
                     <TextBlock Classes="label" Text="Transitions" />
                     <CheckBox x:Name="FadeInBox"
@@ -961,7 +1079,7 @@
                       </UniformGrid>
                     </Grid>
 
-                    <TextBlock Classes="hint" Text="The look is shown on the canvas exactly as it will be exported. Fades show while the short is playing; the sound fades with the picture in the exported file." />
+                    <TextBlock Classes="hint" Text="Looks, speed and effects play on the canvas as they will be exported. Sound slows down and speeds up with the picture and keeps its pitch. Fades show while the short is playing." />
                   </StackPanel>
                 </ScrollViewer>
                 </Panel>

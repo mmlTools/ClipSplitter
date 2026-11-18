@@ -21,6 +21,7 @@ using ClipSplitterApp.Captions;
 using ClipSplitterApp.Controls;
 using ClipSplitterApp.Playback;
 using ClipSplitterApp.Services;
+using ClipSplitterApp.TextOverlays;
 
 namespace ClipSplitterApp.Views;
 
@@ -73,6 +74,7 @@ public partial class MainWindow : Window
 
         // The window's bindings read these as soon as it is built.
         CaptionStyleTiles = CaptionStyle.Presets.Select(style => new CaptionStyleTile(style)).ToList();
+        TextStyleTiles = TextOverlayStyle.Presets.Select(style => new TextStyleTile(style)).ToList();
 
         InitializeComponent();
         DataContext = this;
@@ -131,6 +133,7 @@ public partial class MainWindow : Window
 
         InitializeStudioControls();
         InitializeCaptionControls();
+        InitializeTextControls();
         InitializeEffectControls();
         _ready = true;
 
@@ -184,13 +187,30 @@ public partial class MainWindow : Window
         captions.Accent = SkiaSharp.SKColor.TryParse(_settings.CaptionAccent ?? string.Empty, out var accent) ? accent : null;
         captions.Uppercase = _settings.CaptionUppercase;
 
+        // How a text looks and where it sits is remembered; what it says belongs to one short.
+        var text = _composition.Text;
+        text.StyleId = TextOverlayStyle.Find(_settings.TextStyle).Id;
+        text.Anchor = Enum.TryParse<TextAnchor>(_settings.TextPosition, ignoreCase: true, out var anchor) && Enum.IsDefined(anchor)
+            ? anchor
+            : TextAnchor.Top;
+        text.CentreX = double.IsFinite(_settings.TextX) ? Math.Clamp(_settings.TextX, 0, 1) : 0.5;
+        text.CentreY = double.IsFinite(_settings.TextY) ? Math.Clamp(_settings.TextY, 0, 1) : 0.5;
+        text.Scale = double.IsFinite(_settings.TextScale)
+            ? Math.Clamp(_settings.TextScale, TextOverlaySettings.MinScale, TextOverlaySettings.MaxScale)
+            : 1;
+        text.Accent = SkiaSharp.SKColor.TryParse(_settings.TextAccent ?? string.Empty, out var textAccent) ? textAccent : null;
+        text.ShowSeconds = NearestShowSeconds(_settings.TextShowSeconds);
+
         var effects = _composition.Effects;
         effects.LookId = VideoLook.Find(_settings.Look).Id;
+        effects.EffectId = VideoEffect.Find(_settings.Effect).Id;
         effects.FadeIn = _settings.FadeIn;
         effects.FadeOut = _settings.FadeOut;
         effects.FadeSeconds = double.IsFinite(_settings.FadeSeconds)
             ? Math.Clamp(_settings.FadeSeconds, ShortEffects.MinFadeSeconds, ShortEffects.MaxFadeSeconds)
             : MediumFadeSeconds;
+
+        SetPanelWidths(_settings.ClipListShare, _settings.SettingsPanelWidth);
 
         // The window is not ready yet, so this sets the starting clip length without replanning anything.
         SegmentSecondsBox.Value = Math.Clamp(_settings.SegmentSeconds, 1, 86400);
@@ -207,23 +227,66 @@ public partial class MainWindow : Window
         _settings.CaptionStyle = captions.StyleId;
         _settings.CaptionPosition = captions.Position.ToString();
         _settings.CaptionScale = captions.Scale;
-        _settings.CaptionAccent = captions.Accent is { } accent ? $"#{accent.Red:X2}{accent.Green:X2}{accent.Blue:X2}" : null;
+        _settings.CaptionAccent = ColourText(captions.Accent);
         _settings.CaptionUppercase = captions.Uppercase;
+
+        var text = _composition.Text;
+        _settings.TextStyle = text.StyleId;
+        _settings.TextPosition = text.Anchor.ToString();
+        _settings.TextX = text.CentreX;
+        _settings.TextY = text.CentreY;
+        _settings.TextScale = text.Scale;
+        _settings.TextAccent = ColourText(text.Accent);
+        _settings.TextShowSeconds = text.ShowSeconds;
         _settings.SpeechModel = SelectedSpeechModel.Id;
         _settings.SpeechLanguage = SelectedSpeechLanguage;
         _settings.Look = _composition.Effects.LookId;
+        _settings.Effect = _composition.Effects.EffectId;
         _settings.FadeIn = _composition.Effects.FadeIn;
         _settings.FadeOut = _composition.Effects.FadeOut;
         _settings.FadeSeconds = _composition.Effects.FadeSeconds;
         _settings.WatchObsReplays = _obsWatcher != null;
+
+        // The two resizable panels left of the settings share what is left of the width.
+        var columns = PanelsGrid.ColumnDefinitions;
+        var shared = columns[0].Width.Value + columns[2].Width.Value;
+        if (columns[0].Width.IsStar && columns[2].Width.IsStar && shared > 0)
+            _settings.ClipListShare = columns[0].Width.Value / shared;
+
+        _settings.SettingsPanelWidth = columns[4].Width.IsAbsolute ? columns[4].Width.Value : DefaultSettingsPanelWidth;
         _settings.Save(_settingsFile);
     }
+
+    private const double DefaultClipListShare = 5d / 9d;
+    private const double DefaultSettingsPanelWidth = 320;
+
+    /// <summary>Sets the widths of the three panels: how the clip list and the player share their room, and how wide the settings are.</summary>
+    private void SetPanelWidths(double clipListShare, double settingsWidth)
+    {
+        var columns = PanelsGrid.ColumnDefinitions;
+        var share = double.IsFinite(clipListShare) ? Math.Clamp(clipListShare, 0.2, 0.8) : DefaultClipListShare;
+        var width = double.IsFinite(settingsWidth) ? Math.Clamp(settingsWidth, columns[4].MinWidth, columns[4].MaxWidth) : DefaultSettingsPanelWidth;
+
+        columns[0].Width = new GridLength(share, GridUnitType.Star);
+        columns[2].Width = new GridLength(1 - share, GridUnitType.Star);
+        columns[4].Width = new GridLength(width);
+    }
+
+    private void PanelGrip_DoubleTapped(object? sender, TappedEventArgs e)
+    {
+        SetPanelWidths(DefaultClipListShare, DefaultSettingsPanelWidth);
+        e.Handled = true;
+    }
+
+    /// <summary>A colour as "#RRGGBB" for the settings file, or null for none.</summary>
+    private static string? ColourText(SkiaSharp.SKColor? colour)
+        => colour is { } value ? $"#{value.Red:X2}{value.Green:X2}{value.Blue:X2}" : null;
 
     private enum StudioTab
     {
         Layout,
         Captions,
-        Style,
+        Text,
         Effects
     }
 
@@ -286,7 +349,7 @@ public partial class MainWindow : Window
         EndDrag(e.Pointer);
 
         if (slot >= 0)
-            AssignSlot(slot, item.ToClipSource());
+            AssignClip(slot, item);
     }
 
     private void ClipRow_PointerCaptureLost(object? sender, PointerCaptureLostEventArgs e) => EndDrag(null);
@@ -389,8 +452,9 @@ public partial class MainWindow : Window
         ClipPanel.IsVisible = mode == PreviewMode.Clip;
         ApplyPanelLayout();
 
-        // Captions belong to the vertical canvas only.
+        // Captions and text belong to the vertical canvas only.
         RefreshCaptionScene();
+        UpdateTextMoment();
 
         if (!load)
             return;
@@ -401,8 +465,7 @@ public partial class MainWindow : Window
         }
         else
         {
-            // Opening the clip preview shows the row that is selected in the list, if any.
-            _clipItem ??= PreviewList.SelectedItem as ClipPreviewItem;
+            // The clip preview opens on the clip that was picked last.
             LoadClip(autoPlay: false);
             UpdateClipPanel();
         }
@@ -425,10 +488,24 @@ public partial class MainWindow : Window
 
     private void ShowClip(ClipPreviewItem item, bool autoPlay)
     {
-        _clipItem = item;
+        SetPreviewClip(item);
         SetMode(PreviewMode.Clip, load: false);
         LoadClip(autoPlay);
         UpdateClipPanel();
+    }
+
+    /// <summary>
+    /// Makes a clip the one the clip preview shows, and marks its row in the list. The preview
+    /// follows whichever clip was picked last, whether it was selected, played or put on the
+    /// canvas, so it is never left on the clip of an earlier short.
+    /// </summary>
+    private void SetPreviewClip(ClipPreviewItem item)
+    {
+        _clipItem = item;
+
+        // Only the list that is showing can mark the row.
+        if (_activeSource?.Clips.Contains(item) == true && !ReferenceEquals(PreviewList.SelectedItem, item))
+            PreviewList.SelectedItem = item;
     }
 
     private void LoadClip(bool autoPlay, TimeSpan startAt = default)
@@ -458,13 +535,14 @@ public partial class MainWindow : Window
             return;
 
         var layers = new PlaybackLayer?[_composition.SlotCount];
+        var speed = _composition.Effects.Speed;
         var any = false;
         for (var slot = 0; slot < layers.Length; slot++)
         {
             if (_composition.GetSlot(slot) is not { } clip)
                 continue;
 
-            layers[slot] = new PlaybackLayer(clip.File, clip.Start, clip.Length, clip.Info, _composition.Effects.Look.Filter);
+            layers[slot] = new PlaybackLayer(clip.File, clip.Start, clip.Length / speed, clip.Info, _composition.Effects.PreviewFilter, speed);
             any = true;
         }
 
@@ -524,8 +602,10 @@ public partial class MainWindow : Window
         PositionBar.Value = duration > TimeSpan.Zero ? position / duration : 0;
         TimeText.Text = $"{ClipFormat.Time(position)} / {ClipFormat.Time(duration)}";
 
-        // Starting, stopping and seeking all change which caption the canvas should show.
+        // Starting, stopping and seeking all change which caption the canvas should show, and
+        // whether a text that is being edited stays in view.
         UpdateCaptionMoment();
+        UpdateTextMoment();
     }
 
     private void Window_KeyDown(object? sender, KeyEventArgs e)
@@ -645,17 +725,20 @@ public partial class MainWindow : Window
             return;
 
         _studioTab = ReferenceEquals(radio, CaptionsTabRadio) ? StudioTab.Captions
-            : ReferenceEquals(radio, StyleTabRadio) ? StudioTab.Style
+            : ReferenceEquals(radio, TextTabRadio) ? StudioTab.Text
             : ReferenceEquals(radio, EffectsTabRadio) ? StudioTab.Effects
             : StudioTab.Layout;
 
         LayoutTab.IsVisible = _studioTab == StudioTab.Layout;
         CaptionsTab.IsVisible = _studioTab == StudioTab.Captions;
-        StyleTab.IsVisible = _studioTab == StudioTab.Style;
+        TextTab.IsVisible = _studioTab == StudioTab.Text;
         EffectsTab.IsVisible = _studioTab == StudioTab.Effects;
 
-        // The style tab shows sample captions even before a clip has any of its own.
+        // The captions tab shows sample captions even before a clip has any of its own.
         RefreshCaptions();
+
+        // The text can be dragged on the canvas only while its tab is open.
+        UpdateTextMoment();
     }
 
     private void Format_Changed(object? sender, SelectionChangedEventArgs e)
@@ -704,6 +787,15 @@ public partial class MainWindow : Window
 
         UpdateStudioPanel();
         RefreshCaptions();
+        RefreshText();
+    }
+
+    /// <summary>Puts a clip of the list on the canvas. It is also the clip the clip preview opens on next.</summary>
+    private void AssignClip(int slot, ClipPreviewItem item)
+    {
+        SetPreviewClip(item);
+        UpdateClipPanel();
+        AssignSlot(slot, item.ToClipSource());
     }
 
     private void AssignSlot(int slot, ClipSource clip)
@@ -719,6 +811,9 @@ public partial class MainWindow : Window
         UpdateStudioPanel();
         LoadComposition(keepPosition: false);
         RefreshCaptions();
+
+        // A text in the middle moves to the divider when the layout became the stacked one.
+        RefreshText();
     }
 
     private void ClearTop_Click(object? sender, RoutedEventArgs e) => ClearSlot(0);
@@ -766,6 +861,7 @@ public partial class MainWindow : Window
         UpdateStudioPanel();
         LoadComposition(keepPosition: true);
         RefreshCaptions();
+        RefreshText();
     }
 
     private void Audio_Changed(object? sender, RoutedEventArgs e)
@@ -787,9 +883,15 @@ public partial class MainWindow : Window
     /// <summary>The user moved the divider or reframed a clip on the canvas.</summary>
     private void OnCanvasEdited()
     {
-        // Captions in the middle sit on the divider, so they move with it.
-        if (_composition.Captions.Position == CaptionPosition.Middle && _composition.Layout == VerticalLayoutKind.Stacked)
+        if (_composition.Layout != VerticalLayoutKind.Stacked)
+            return;
+
+        // Captions and text in the middle sit on the divider, so they move with it.
+        if (_composition.Captions.Position == CaptionPosition.Middle)
             RefreshCaptionScene();
+
+        if (_composition.Text.Anchor == TextAnchor.Middle)
+            RefreshText();
     }
 
     private void UpdateStudioPanel()
@@ -926,7 +1028,7 @@ public partial class MainWindow : Window
                 var clip = clips[index];
                 var file = ClipFormat.UniquePath(Path.Combine(
                     output,
-                    ClipFormat.OutputFileName(clip.File, clip.Start, clip.Start + composition.Duration, VerticalExporter.OutputExtension, composition.Format.FileTag)));
+                    ClipFormat.OutputFileName(clip.File, clip.Start, clip.Start + composition.SourceDuration, VerticalExporter.OutputExtension, composition.Format.FileTag)));
 
                 Log($"Creating {Path.GetFileName(file)}");
                 var done = index;
@@ -965,7 +1067,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        var name = ClipFormat.OutputFileName(first.File, first.Start, first.Start + composition.Duration, VerticalExporter.OutputExtension, composition.Format.FileTag);
+        var name = ClipFormat.OutputFileName(first.File, first.Start, first.Start + composition.SourceDuration, VerticalExporter.OutputExtension, composition.Format.FileTag);
 
         await RunExportAsync(ExportShortButton, ExportShortText, output, async (progress, token) =>
         {

@@ -31,12 +31,41 @@ public sealed class AppSettings
 
     public bool? CaptionUppercase { get; set; }
 
+    /// <summary>The look of the text written over shorts, by its id. What the text says is not remembered.</summary>
+    public string TextStyle { get; set; } = "bold";
+
+    /// <summary>"Top", "Middle" or "Bottom", or "Custom" for the place in <see cref="TextX"/> and <see cref="TextY"/>.</summary>
+    public string TextPosition { get; set; } = "Top";
+
+    /// <summary>The middle of a text that was dragged into place, as a fraction of the frame's width.</summary>
+    public double TextX { get; set; } = 0.5;
+
+    /// <summary>The middle of a text that was dragged into place, as a fraction of the frame's height.</summary>
+    public double TextY { get; set; } = 0.5;
+
+    public double TextScale { get; set; } = 1;
+
+    /// <summary>The text's accent colour as "#RRGGBB", or null for the style's own.</summary>
+    public string? TextAccent { get; set; }
+
+    /// <summary>How many seconds the text shows from the start of a short, or null for the whole short.</summary>
+    public double? TextShowSeconds { get; set; }
+
+    /// <summary>The share of the width left of the settings that the clip list takes; the player takes the rest.</summary>
+    public double ClipListShare { get; set; } = 5d / 9d;
+
+    /// <summary>The width of the settings panel on the right.</summary>
+    public double SettingsPanelWidth { get; set; } = 320;
+
     public string SpeechModel { get; set; } = "small";
 
     public string SpeechLanguage { get; set; } = "auto";
 
     /// <summary>The colour look of shorts, by its id.</summary>
     public string Look { get; set; } = VideoLook.Natural.Id;
+
+    /// <summary>What moves the picture of shorts, such as a wave, by its id. The speed of a short is not remembered.</summary>
+    public string Effect { get; set; } = VideoEffect.None.Id;
 
     public bool FadeIn { get; set; }
 

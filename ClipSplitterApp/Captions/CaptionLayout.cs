@@ -530,7 +530,8 @@ public static class CaptionLayout
         return SKRect.Inflate(bounds, boxX + edge + growX + tiltX, boxY + edge + growY + tiltY);
     }
 
-    private static SKRectI ToBand(SKRect bounds, int width, int height)
+    /// <summary>The whole pixels of the frame that cover an area, or an empty rectangle when the area is.</summary>
+    internal static SKRectI ToBand(SKRect bounds, int width, int height)
     {
         if (bounds.IsEmpty)
             return SKRectI.Empty;
@@ -544,7 +545,7 @@ public static class CaptionLayout
         return right - left < 2 || bottom - top < 2 ? SKRectI.Empty : new SKRectI(left, top, right, bottom);
     }
 
-    private static bool IsRightToLeft(string text)
+    internal static bool IsRightToLeft(string text)
     {
         foreach (var character in text)
         {

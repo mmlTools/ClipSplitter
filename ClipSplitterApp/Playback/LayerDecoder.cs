@@ -49,12 +49,17 @@ internal sealed class LayerDecoder : IDisposable
 
         // start_time=0 repeats the first frame if the video track begins late, keeping frame
         // numbers in step with the clock.
-        var filter = $"fps={FfmpegTools.ArgNumber(fps)}:start_time=0,scale={width}:{height}:flags=fast_bilinear,setsar=1";
+        var rate = FfmpegTools.ArgNumber(fps);
+        var filter = $"fps={rate}:start_time=0,scale={width}:{height}:flags=fast_bilinear,setsar=1";
 
-        // A look is applied to the small preview frame, where it costs next to nothing, with the
-        // same filter the exporter uses on the full-size picture.
+        // Slow motion and speed-up stretch or squeeze the time between frames before they are counted.
+        if (layer.Speed != 1)
+            filter = $"setpts=PTS/{FfmpegTools.ArgNumber(layer.Speed)}," + filter;
+
+        // Looks and effects are applied to the small preview frame, where they cost next to
+        // nothing, with the same filters the exporter uses on the full-size picture.
         if (!string.IsNullOrEmpty(layer.VideoFilter))
-            filter += "," + layer.VideoFilter;
+            filter += "," + EffectFilter.Resolve(layer.VideoFilter, width, height, rate, string.Empty);
 
         var args = new List<string> { "-hide_banner", "-nostdin", "-loglevel", "error" };
 
@@ -65,8 +70,8 @@ internal sealed class LayerDecoder : IDisposable
 
         args.AddRange(new[]
         {
-            "-ss", FfmpegTools.ArgTime(layer.Start + offset),
-            "-t", FfmpegTools.ArgTime(length),
+            "-ss", FfmpegTools.ArgTime(layer.SourceTime(offset)),
+            "-t", FfmpegTools.ArgTime(length * layer.Speed),
             "-an", "-sn", "-dn",
             "-i", layer.File,
             "-map", "0:V:0",

@@ -6,7 +6,7 @@ using ClipSplitterApp.Services;
 
 namespace ClipSplitterApp.Views;
 
-/// <summary>The effects tab: the colour look of a short, and how it fades in and out.</summary>
+/// <summary>The effects tab: the colour look of a short, its speed, what moves its picture, and how it fades in and out.</summary>
 public partial class MainWindow
 {
     private const double ShortFadeSeconds = 0.3;
@@ -14,6 +14,8 @@ public partial class MainWindow
     private const double LongFadeSeconds = 1;
 
     private readonly List<RadioButton> _lookButtons = new();
+    private readonly List<RadioButton> _speedButtons = new();
+    private readonly List<RadioButton> _effectButtons = new();
 
     private void InitializeEffectControls()
     {
@@ -35,6 +37,41 @@ public partial class MainWindow
             LookPanel.Children.Add(button);
         }
 
+        foreach (var speed in ShortEffects.Speeds)
+        {
+            var button = new RadioButton
+            {
+                GroupName = "ShortSpeed",
+                Content = speed.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) + "×",
+                Tag = speed,
+                Padding = new Thickness(2, 6),
+                Margin = new Thickness(0, 0, 6, 0)
+            };
+            button.Classes.Add("segment");
+            ToolTip.SetTip(button, speed < 1 ? "Slow motion" : speed > 1 ? "Faster than recorded" : "As recorded");
+            button.IsCheckedChanged += Speed_Changed;
+
+            _speedButtons.Add(button);
+            SpeedPanel.Children.Add(button);
+        }
+
+        foreach (var effect in VideoEffect.All)
+        {
+            var button = new RadioButton
+            {
+                GroupName = "VideoEffect",
+                Content = effect.Name,
+                Tag = effect,
+                Margin = new Thickness(0, 0, 6, 6)
+            };
+            button.Classes.Add("segment");
+            ToolTip.SetTip(button, effect.Tip);
+            button.IsCheckedChanged += Effect_Changed;
+
+            _effectButtons.Add(button);
+            EffectPanel.Children.Add(button);
+        }
+
         _syncingUi = false;
         UpdateEffectsPanel();
     }
@@ -49,6 +86,12 @@ public partial class MainWindow
 
         foreach (var button in _lookButtons)
             button.IsChecked = ReferenceEquals(button.Tag, look);
+
+        foreach (var button in _speedButtons)
+            button.IsChecked = button.Tag is double speed && speed == effects.Speed;
+
+        foreach (var button in _effectButtons)
+            button.IsChecked = ReferenceEquals(button.Tag, effects.Effect);
 
         FadeInBox.IsChecked = effects.FadeIn;
         FadeOutBox.IsChecked = effects.FadeOut;
@@ -70,6 +113,27 @@ public partial class MainWindow
         _composition.Effects.LookId = look.Id;
 
         // The player applies the look as it decodes, so it picks up again from where it was.
+        LoadComposition(keepPosition: true);
+    }
+
+    private void Speed_Changed(object? sender, RoutedEventArgs e)
+    {
+        if (!_ready || _syncingUi || sender is not RadioButton { IsChecked: true, Tag: double speed })
+            return;
+
+        _composition.Effects.Speed = speed;
+
+        // The short is now a different length, so it starts over, and its captions are timed anew.
+        LoadComposition(keepPosition: false);
+        RefreshCaptions();
+    }
+
+    private void Effect_Changed(object? sender, RoutedEventArgs e)
+    {
+        if (!_ready || _syncingUi || sender is not RadioButton { IsChecked: true, Tag: VideoEffect effect })
+            return;
+
+        _composition.Effects.EffectId = effect.Id;
         LoadComposition(keepPosition: true);
     }
 

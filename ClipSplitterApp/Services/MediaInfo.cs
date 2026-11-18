@@ -41,6 +41,12 @@ public sealed record MediaInfo(
     /// <summary>"pc" for full-range video, otherwise "tv".</summary>
     public string ColorRangeArg => ColorRange == "pc" ? "pc" : "tv";
 
+    /// <summary>True when the file says which matrix its colours use, rather than leaving it to be guessed.</summary>
+    public bool HasColorMatrix => ColorSpace is "bt709" or "smpte170m" or "bt470bg" or "bt2020nc" or "bt2020c";
+
+    /// <summary>True when the file says whether its video is full range or limited range.</summary>
+    public bool HasColorRange => ColorRange is "tv" or "pc";
+
     /// <summary>The frame rate as a fraction, for streams that must stay exactly in step with the video.</summary>
     public (int Numerator, int Denominator) FrameRateFraction
     {

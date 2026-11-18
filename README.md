@@ -13,13 +13,15 @@ A small Avalonia desktop app that turns long videos into short ones. It splits v
   - **Blur**: the whole clip over a blurred copy of itself.
 - **Any format.** 9:16 for TikTok, Reels and Shorts, 4:5 and 3:4 for the Instagram feed, 1:1, 16:9 for YouTube, or a size of your own.
 - **Captions.** ClipSplitter listens to a clip and writes down what is said, on your computer. Pick one of eight styles, a colour, a size, and whether the captions sit at the top, in the middle or at the bottom. Correct any word before you export.
-- **Effects and transitions.** Give a short a colour look (Vivid, Black and white, Warm, Cool, Vintage) and fade it in and out, picture and sound together.
+- **Text.** Write a title or a hook over the short. Pick one of eight styles and a colour, drag the text where you want it on the canvas, and choose whether it stays for the whole short or only opens it.
+- **Effects and transitions.** Give a short a colour look, play it in slow motion or sped up, add a wave, a shake, a glitch or film grain, and fade it in and out, picture and sound together.
+- **Panels you can resize.** Drag the gap between the clip list, the player and the settings to give each the width you want.
 - **Reframe on the canvas.** Drag a clip to choose what stays in frame, scroll to zoom, double-click to reset.
 - **Choose the sound**: top clip, bottom clip, both mixed, or none.
 - **Batch shorts.** Export every ticked clip as a short in one go, each with captions for its own speech.
 - **OBS Studio replays.** Load the latest replay from the replay buffer with two clicks, or have new replays appear as OBS saves them.
 
-The canvas preview and the exporter share the same layout maths and the same caption drawing code, so the exported short matches what you see.
+The canvas preview and the exporter share the same layout maths and the same drawing code for text and captions, so the exported short matches what you see.
 
 ## Requirements
 
@@ -108,6 +110,8 @@ Clips already on the canvas stay there when you switch videos or remove one, so 
 
 Press the play button on a clip to watch it in the **Clip preview** tab. To trim it, pause where the clip should begin or end and press **Start here** or **End here**. **Reset** restores the full clip. Space plays and pauses.
 
+The clip preview follows the clip you picked last. Selecting a clip in the list, or putting one on the canvas, makes it the clip the **Clip preview** tab opens on, so it is ready to trim when you move on to the next short. Switching to another video empties the preview until you pick one of its clips.
+
 ### Make a short
 
 1. Open the **Vertical studio** tab.
@@ -139,7 +143,7 @@ The canvas takes the shape you pick, and your framing is kept. To publish the sa
 1. Put the clip with the talking on the canvas.
 2. On the **Captions** tab, click **Generate captions**. The first time, the speech model is downloaded.
 3. Read through the text. Click a line to correct it and press Enter; the time next to a line jumps there. Words keep their timing. If you change the number of words in a line, the line's time is shared between them.
-4. On the **Style** tab, pick a look, a position, a size and a colour. The canvas shows the result as you choose.
+4. Further down the same tab, under **Caption style**, pick a look, a position, a size and a colour. The canvas shows the result as you choose. Captions show on the canvas only while **Add captions to the short** is ticked.
 5. Export. The captions are burned into the picture.
 
 Things worth knowing:
@@ -151,18 +155,44 @@ Things worth knowing:
 - **Batch shorts.** With **Add captions to the short** ticked, each short in a batch gets captions for its own clip. Clips that have none yet are listened to on the way.
 - **Middle** puts the captions on the divider when two clips are stacked.
 
+### Add text
+
+1. On the **Text** tab, write the text. Press Enter to start a new line. Long lines wrap by themselves, into lines of similar length.
+2. Pick a style: *Bold*, *Label*, *Banner*, *Shade*, *Gold*, *Comic*, *Neon* or *Poster*. The canvas shows the text as you type and choose.
+3. Place it. **Top**, **Middle** and **Bottom** put it in the usual places; **Middle** is the divider when two clips are stacked. For anywhere else, drag the text on the canvas. It catches on the middle of the frame as it passes, and never leaves the frame.
+4. Set the size with the slider, or scroll over the text on the canvas.
+5. Pick a colour. Depending on the style it colours the letters, the box behind them, the glow or the shadow. On a box, the letters turn dark or white by themselves so that they stay readable.
+6. Export. The text is burned into the picture.
+
+Things worth knowing:
+
+- **Show.** *Always* keeps the text for the whole short. *First 3 s* and *First 5 s* make it a hook: it opens the short and then fades away. While the Text tab is open the text stays on the canvas at any moment, so you can still work on it; press play, or open another tab, to see it come and go.
+- **Moving and resizing on the canvas** work while the Text tab is open. On the other tabs, dragging and scrolling reframe the clip under the text, as before.
+- **The text stays** when you put another clip on the canvas, and it goes on every short of a batch. Clear the box for a short without text.
+- **Text and captions** can be used together. The text is drawn under the captions, and both keep their own colours whatever look the short has.
+- Text is limited to 200 characters. Text that does not fit the frame at the chosen size is made smaller until it does.
+
 ### Add effects and transitions
 
 On the **Effects** tab:
 
-- **Look** changes the colours of the whole short: *Vivid*, *B&W*, *Warm*, *Cool* or *Vintage*. *Natural* leaves the picture as it was recorded. The canvas shows the look exactly as it will be exported, because the preview runs the same FFmpeg filter as the export. Captions keep their own colours.
+- **Look** changes the colours of the whole short: *Vivid*, *B&W*, *Warm*, *Cool*, *Vintage*, *Punch*, *Dream* or *VHS*. *Natural* leaves the picture as it was recorded. The canvas shows the look exactly as it will be exported, because the preview runs the same FFmpeg filter as the export. Text and captions keep their own colours.
 - **Fade in at the start** and **Fade out at the end** open the short from black and close it to black. The sound fades with the picture. **Length** sets how long each fade takes: 0.3, 0.6 or 1 second. On the canvas, fades show while the short is playing; when it is paused the picture stays in full view so you can still frame it.
 
-Looks use FFmpeg's `eq`, `hue`, `colorbalance` and `curves` filters. An FFmpeg build that can export shorts at all, which needs libx264, has them.
+- **Speed** plays the short at 0.5×, 0.75×, 1.5× or 2× the speed of its clips. Below 1× is slow motion. Sound changes speed with the picture and keeps its pitch, captions follow, and the short gets longer or shorter to match: a 30 second clip at 0.5× is a 60 second short.
+- **Effect** moves or disturbs the picture: *Wave* ripples it from side to side, *Shake* is a restless hand-held camera, *Glitch* splits the colours apart in short bursts, and *Grain* adds film grain. One effect at a time. In a stacked short each clip gets the effect on its own.
+
+The speed is not remembered between runs; the look and the effect are.
+
+### Resize the panels
+
+Drag the gap between two panels to resize them; the pointer turns into a double arrow there. Double-click the gap to put all three back. The widths are remembered. Each panel keeps a least width, so on a small window there is little to move.
+
+Looks and effects use FFmpeg's `eq`, `hue`, `colorbalance`, `curves`, `unsharp`, `gblur`, `chromashift`, `noise`, `displace` and `geq` filters, and speed uses `setpts` and `atempo`. An FFmpeg build that can export shorts at all, which needs libx264, has them.
 
 ### Make many shorts at once
 
-Set up the format, layout, captions and effects in the vertical studio, tick the clips you want, switch the export format to **Shorts** and click **Export selected**. Each ticked clip becomes its own short. In the stacked layout each clip takes the top half and the bottom clip stays the same.
+Set up the format, layout, text, captions and effects in the vertical studio, tick the clips you want, switch the export format to **Shorts** and click **Export selected**. Each ticked clip becomes its own short. In the stacked layout each clip takes the top half and the bottom clip stays the same. Every short gets the same text.
 
 ### Load a replay from OBS Studio
 
@@ -193,7 +223,7 @@ For videos shorter than one hour, timestamps are `mm-ss`. For videos over one ho
 
 ## Remembered settings
 
-The format, whether captions are on, the caption style, position, size and colour, the caption language and quality, the look and the fades, the clip length, and whether to watch for OBS replays are remembered between runs, in `settings.json` in the `ClipSplitter` folder of your local app data. Delete the file to return to the defaults.
+The format, whether captions are on, the caption style, position, size and colour, the caption language and quality, the style, place, size and colour of the text and how long it shows, the look, the effect and the fades, the widths of the three panels, the clip length, and whether to watch for OBS replays are remembered between runs, in `settings.json` in the `ClipSplitter` folder of your local app data. What the text says is not remembered: every session starts without one. Delete the file to return to the defaults.
 
 ## Versioning
 

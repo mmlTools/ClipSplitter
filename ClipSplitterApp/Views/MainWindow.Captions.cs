@@ -44,7 +44,7 @@ public partial class MainWindow
     /// <summary>The caption text of the short on the canvas, one row per group of words.</summary>
     public ObservableCollection<CaptionLineItem> CaptionLines { get; } = new();
 
-    /// <summary>The styles offered on the style tab, each with a picture of itself.</summary>
+    /// <summary>The caption styles offered on the captions tab, each with a picture of itself.</summary>
     public IReadOnlyList<CaptionStyleTile> CaptionStyleTiles { get; }
 
     private SpeechModel SelectedSpeechModel => CaptionModelBox.SelectedItem as SpeechModel ?? SpeechModel.Accurate;
@@ -70,9 +70,21 @@ public partial class MainWindow
 
     private void AddAccentSwatch(SKColor? color, string? tip)
     {
+        var swatch = CreateSwatch("CaptionAccent", color, tip);
+        swatch.IsCheckedChanged += CaptionAccent_Changed;
+        _accentSwatches.Add(swatch);
+        CaptionAccentPanel.Children.Add(swatch);
+    }
+
+    /// <summary>
+    /// A round colour button. Without a colour of its own it stands for the colour a style comes
+    /// with, and carries a letter to tell it apart.
+    /// </summary>
+    private static RadioButton CreateSwatch(string group, SKColor? color, string? tip)
+    {
         var swatch = new RadioButton
         {
-            GroupName = "CaptionAccent",
+            GroupName = group,
             Tag = color,
             Margin = new Avalonia.Thickness(0, 0, 4, 4)
         };
@@ -88,9 +100,18 @@ public partial class MainWindow
             ToolTip.SetTip(swatch, tip);
         }
 
-        swatch.IsCheckedChanged += CaptionAccent_Changed;
-        _accentSwatches.Add(swatch);
-        CaptionAccentPanel.Children.Add(swatch);
+        return swatch;
+    }
+
+    /// <summary>Paints the swatch that stands for a style's own colour, with its letter kept readable on it.</summary>
+    private static void ShowOwnColour(RadioButton swatch, SKColor own)
+    {
+        swatch.Background = ToBrush(own);
+        if (swatch.Content is not TextBlock mark)
+            return;
+
+        var brightness = 0.299 * own.Red + 0.587 * own.Green + 0.114 * own.Blue;
+        mark.Foreground = brightness > 140 ? SolidColorBrush.Parse("#0E1118") : Brushes.White;
     }
 
     private static IBrush ToBrush(SKColor color) => new SolidColorBrush(Color.FromArgb(255, color.Red, color.Green, color.Blue));
@@ -106,7 +127,7 @@ public partial class MainWindow
         var clip = _composition.CaptionClip;
         _captionTranscript = clip == null
             ? null
-            : _transcripts.Find(clip.File, clip.Start, clip.Start + _composition.Duration);
+            : _transcripts.Find(clip.File, clip.Start, clip.Start + _composition.SourceDuration);
 
         RefreshCaptionScene();
         UpdateCaptionPanel();
@@ -120,18 +141,20 @@ public partial class MainWindow
 
         if (_captionTranscript is { } transcript && _composition.CaptionClip is { } clip)
         {
-            var words = WordsFor(transcript, clip, _composition.Duration, out _captionFirstWord);
+            var words = WordsFor(transcript, clip, _composition, out _captionFirstWord);
             if (words.Count > 0)
                 _captionScene = BuildScene(words, _composition);
         }
 
         RebuildCaptionLines();
 
-        // The style tab shows captions even while they are off or the canvas is empty, so a
-        // style can be chosen by eye.
+        // The canvas shows captions only while they are switched on, so it never promises
+        // captions the short will not have. With the captions tab open they show even on an
+        // empty canvas, so a style can be chosen by eye before any clip is there.
         var settings = _composition.Captions;
         var visible = _mode == PreviewMode.Vertical
-                      && (_studioTab == StudioTab.Style || (settings.Enabled && _composition.CaptionClip != null));
+                      && settings.Enabled
+                      && (_studioTab == StudioTab.Captions || _composition.CaptionClip != null);
         CaptionScene? shown = null;
         _sampleShown = false;
 
@@ -153,7 +176,7 @@ public partial class MainWindow
 
     /// <summary>
     /// Chooses the moment the canvas shows captions at. They normally follow the player; sample
-    /// words hold still, and so does the style tab while the player rests between two lines,
+    /// words hold still, and so does the captions tab while the player rests between two lines,
     /// because a style cannot be judged with nothing on screen.
     /// </summary>
     private void UpdateCaptionMoment()
@@ -164,7 +187,7 @@ public partial class MainWindow
         {
             if (_sampleShown)
                 freeze = SampleMoment;
-            else if (_studioTab == StudioTab.Style && !_player.IsPlaying && scene.FindPage(_player.Position) == null)
+            else if (_studioTab == StudioTab.Captions && !_player.IsPlaying && scene.FindPage(_player.Position) == null)
                 freeze = NearestCaptionMoment(scene, _player.Position);
         }
 
@@ -225,14 +248,17 @@ public partial class MainWindow
 
     /// <summary>The words of a transcript that fall inside a clip, timed from the start of the short.</summary>
     /// <param name="first">Receives the position in the transcript of the first word returned.</param>
-    private static List<CaptionWord> WordsFor(Transcript transcript, ClipSource clip, TimeSpan duration, out int first)
+    private static List<CaptionWord> WordsFor(Transcript transcript, ClipSource clip, VerticalComposition composition, out int first)
     {
-        var (start, count) = transcript.Range(clip.Start, clip.Start + duration);
+        var (start, count) = transcript.Range(clip.Start, clip.Start + composition.SourceDuration);
         first = start;
+
+        // A short that plays slower or faster than its clips says its words slower or faster too.
+        var speed = composition.Effects.Speed;
 
         return transcript.Words
             .GetRange(start, count)
-            .Select(word => new CaptionWord(word.Text, word.Start - clip.Start, word.End - clip.Start))
+            .Select(word => new CaptionWord(word.Text, (word.Start - clip.Start) / speed, (word.End - clip.Start) / speed))
             .ToList();
     }
 
@@ -285,15 +311,8 @@ public partial class MainWindow
         CaptionSizeSlider.Value = Math.Round(settings.Scale * 100);
         CaptionCapsBox.IsChecked = style.Uppercase;
 
-        // The first swatch shows the colour the chosen style comes with, marked with a letter
-        // that stays readable on it.
-        var own = CaptionStyle.Find(settings.StyleId).Accent;
-        _accentSwatches[0].Background = ToBrush(own);
-        if (_accentSwatches[0].Content is TextBlock mark)
-        {
-            var brightness = 0.299 * own.Red + 0.587 * own.Green + 0.114 * own.Blue;
-            mark.Foreground = brightness > 140 ? SolidColorBrush.Parse("#0E1118") : Brushes.White;
-        }
+        // The first swatch shows the colour the chosen style comes with.
+        ShowOwnColour(_accentSwatches[0], CaptionStyle.Find(settings.StyleId).Accent);
 
         foreach (var swatch in _accentSwatches)
             swatch.IsChecked = Equals(swatch.Tag as SKColor?, settings.Accent);
@@ -331,7 +350,7 @@ public partial class MainWindow
 
         if (_captionTranscript is { } transcript)
         {
-            var count = transcript.Range(clip.Start, clip.Start + _composition.Duration).Count;
+            var count = transcript.Range(clip.Start, clip.Start + _composition.SourceDuration).Count;
             if (count == 0)
                 return $"No speech was found in this part of {Path.GetFileName(clip.File)}.";
 
@@ -401,7 +420,7 @@ public partial class MainWindow
 
         var model = SelectedSpeechModel;
         var language = SelectedSpeechLanguage;
-        var end = clip.Start + composition.Duration;
+        var end = clip.Start + composition.SourceDuration;
         Transcript? made = null;
 
         var completed = await RunWorkAsync(GenerateCaptionsButton, GenerateCaptionsText, "Cancel", async (progress, token) =>
@@ -472,7 +491,7 @@ public partial class MainWindow
     private bool NeedsTranscript(VerticalComposition composition)
         => composition.Captions.Enabled
            && composition.CaptionClip is { Info.HasAudio: true } clip
-           && _transcripts.Find(clip.File, clip.Start, clip.Start + composition.Duration) == null;
+           && _transcripts.Find(clip.File, clip.Start, clip.Start + composition.SourceDuration) == null;
 
     /// <summary>
     /// The captions for a composition that is about to be exported, laid out for its frame.
@@ -484,7 +503,7 @@ public partial class MainWindow
         if (!composition.Captions.Enabled || composition.CaptionClip is not { } clip)
             return null;
 
-        var end = clip.Start + composition.Duration;
+        var end = clip.Start + composition.SourceDuration;
         var transcript = _transcripts.Find(clip.File, clip.Start, end);
 
         if (transcript == null)
@@ -495,7 +514,7 @@ public partial class MainWindow
             transcript = await TranscribeAsync(clip, end, SelectedSpeechModel, SelectedSpeechLanguage, progress, token);
         }
 
-        var words = WordsFor(transcript, clip, composition.Duration, out _);
+        var words = WordsFor(transcript, clip, composition, out _);
         return words.Count == 0 ? null : BuildScene(words, composition);
     }
 
@@ -533,7 +552,7 @@ public partial class MainWindow
             _transcripts.Add(transcript);
             _composition.Captions.Enabled = true;
 
-            var inClip = transcript.Range(clip.Start, clip.Start + _composition.Duration).Count;
+            var inClip = transcript.Range(clip.Start, clip.Start + _composition.SourceDuration).Count;
             Log(inClip > 0
                 ? $"Imported {Path.GetFileName(path)}: {inClip} of its {words.Count} words fall inside this clip."
                 : $"Imported {Path.GetFileName(path)}, but none of its lines fall inside this clip. Subtitle times are read as times in the source video.");
@@ -593,7 +612,7 @@ public partial class MainWindow
         }, DispatcherPriority.Background);
     }
 
-    // ---------------------------------------------------------------- Style tab
+    // ---------------------------------------------------------------- Captions tab: the style
 
     private void CaptionStyle_Changed(object? sender, SelectionChangedEventArgs e)
     {

@@ -5,6 +5,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using ClipSplitterApp.Captions;
+using ClipSplitterApp.TextOverlays;
 
 namespace ClipSplitterApp.Services;
 
@@ -13,7 +14,7 @@ public static class VerticalExporter
 {
     public const string OutputExtension = ".mp4";
 
-    /// <param name="composition">What to render.</param>
+    /// <param name="composition">What to render. Its text, if it has one, is burned in.</param>
     /// <param name="outputFile">Where to write the short.</param>
     /// <param name="captions">Captions to burn in, laid out for this composition, or null for none.</param>
     /// <param name="progress">Receives progress from 0 to 1.</param>
@@ -27,33 +28,61 @@ public static class VerticalExporter
             ? new CaptionFrameSource(captions, PrimaryClip(composition).Info.FrameRateFraction)
             : null;
 
-        var args = BuildArguments(composition, outputFile, frames, out var duration);
-        Directory.CreateDirectory(Path.GetDirectoryName(outputFile) ?? AppContext.BaseDirectory);
+        var text = composition.LayOutText() is { IsEmpty: false } laidOut ? laidOut : null;
+        string? textImage = null;
 
         try
         {
-            // The caption frames are drawn while ffmpeg encodes, and handed to it through its standard input.
-            Action<Stream, CancellationToken>? feed = frames == null ? null : (stream, cancel) => frames.WriteTo(stream, duration, cancel);
-            await FfmpegTools.RunFfmpegAsync(args, duration, progress, token, feed);
+            if (text != null)
+            {
+                // The text does not change from frame to frame, so ffmpeg is given it once, as a picture.
+                var folder = Path.Combine(Path.GetTempPath(), "ClipSplitter");
+                Directory.CreateDirectory(folder);
+                textImage = Path.Combine(folder, $"text-{Guid.NewGuid():N}.png");
+                TextOverlayPainter.SaveImage(text, textImage);
+            }
+
+            var args = BuildArguments(composition, outputFile, frames, text, textImage, out var duration);
+            Directory.CreateDirectory(Path.GetDirectoryName(outputFile) ?? AppContext.BaseDirectory);
+
+            try
+            {
+                // The caption frames are drawn while ffmpeg encodes, and handed to it through its standard input.
+                Action<Stream, CancellationToken>? feed = frames == null ? null : (stream, cancel) => frames.WriteTo(stream, duration, cancel);
+                await FfmpegTools.RunFfmpegAsync(args, duration, progress, token, feed);
+            }
+            catch
+            {
+                FfmpegClipSplitter.TryDelete(outputFile);
+                throw;
+            }
         }
-        catch
+        finally
         {
-            FfmpegClipSplitter.TryDelete(outputFile);
-            throw;
+            if (textImage != null)
+                FfmpegClipSplitter.TryDelete(textImage);
         }
     }
 
     /// <param name="composition">What to render.</param>
     /// <param name="outputFile">Where to write the short.</param>
     /// <param name="captions">The caption stream that will be fed to ffmpeg's standard input, or null for none.</param>
+    /// <param name="text">The text to lay over the short, or null for none.</param>
+    /// <param name="textImage">The picture of <paramref name="text"/> made by <see cref="TextOverlayPainter.SaveImage"/>.</param>
     /// <param name="duration">Receives the length of the short.</param>
-    public static List<string> BuildArguments(VerticalComposition composition, string outputFile, CaptionFrameSource? captions, out TimeSpan duration)
+    public static List<string> BuildArguments(
+        VerticalComposition composition,
+        string outputFile,
+        CaptionFrameSource? captions,
+        TextOverlayScene? text,
+        string? textImage,
+        out TimeSpan duration)
     {
         duration = composition.Duration;
         if (duration <= TimeSpan.Zero)
             throw new InvalidOperationException("Add a clip to the vertical canvas first.");
 
-        // One ffmpeg input per filled slot, each already trimmed to the length of the short.
+        // One ffmpeg input per filled slot, each already trimmed to the stretch the short uses.
         var args = new List<string>();
         var inputOfSlot = new int[2] { -1, -1 };
         var inputCount = 0;
@@ -64,7 +93,7 @@ public static class VerticalExporter
                 continue;
 
             inputOfSlot[slot] = inputCount++;
-            args.AddRange(new[] { "-ss", FfmpegTools.ArgTime(clip.Start), "-t", FfmpegTools.ArgTime(duration), "-i", clip.File });
+            args.AddRange(new[] { "-ss", FfmpegTools.ArgTime(clip.Start), "-t", FfmpegTools.ArgTime(composition.SourceDuration), "-i", clip.File });
         }
 
         var primary = PrimaryClip(composition);
@@ -72,14 +101,18 @@ public static class VerticalExporter
         var filters = new List<string>();
 
         var effects = composition.Effects;
-        var look = effects.Look.Filter;
+        var look = effects.Look.Filter is { } lookTemplate
+            ? EffectFilter.Resolve(lookTemplate, composition.CanvasWidth, composition.CanvasHeight, fps, "look")
+            : null;
         var fade = effects.FadeLength(duration);
         var fades = effects.HasFades && fade > TimeSpan.Zero;
 
+        var textFile = text is { IsEmpty: false } ? textImage : null;
+
         // The clips are arranged first. Whatever is added afterwards works on the finished
-        // picture, in this order: the look, then the captions, then the fades, so that captions
-        // keep their own colours and fade with everything else.
-        var picture = look == null && captions == null && !fades ? "vout" : "vpicture";
+        // picture, in this order: the look, then the text and the captions, then the fades, so
+        // that text and captions keep their own colours and fade with everything else.
+        var picture = look == null && textFile == null && captions == null && !fades ? "vout" : "vpicture";
 
         if (composition.Layout == VerticalLayoutKind.Blur)
             BuildBlurGraph(composition, fps, picture, filters);
@@ -92,9 +125,40 @@ public static class VerticalExporter
             picture = "vlooked";
         }
 
+        // Text and captions are converted with the same colour matrix as the footage, so a yellow
+        // word is the same yellow in the file as on the canvas.
+        var overlayColours = $"scale=out_color_matrix={primary.Info.ColorMatrixArg}:out_range={primary.Info.ColorRangeArg},format=yuva420p";
+
+        if (text != null && textFile != null)
+        {
+            var textInput = inputCount++;
+            var x = text.Band.Left;
+            var y = text.Band.Top;
+
+            if (text.ShowFor is { } shown && shown < duration)
+            {
+                // A text that leaves early is repeated as a stream of its own, so that it can fade away.
+                var gone = shown + TextOverlayScene.FadeOut;
+                var fadeOut = $"fade=t=out:st={FfmpegTools.ArgTime(shown)}:d={FfmpegTools.ArgTime(TextOverlayScene.FadeOut)}:alpha=1";
+
+                args.AddRange(new[] { "-loop", "1", "-framerate", fps, "-t", FfmpegTools.ArgTime(gone < duration ? gone : duration), "-i", textFile });
+                filters.Add($"[{textInput}:v]{overlayColours},{fadeOut}[text]");
+                filters.Add($"[{picture}][text]overlay=x={x}:y={y}:eof_action=pass,format=yuv420p[vtexted]");
+            }
+            else
+            {
+                // A single picture stays on the short for as long as the short lasts.
+                args.AddRange(new[] { "-i", textFile });
+                filters.Add($"[{textInput}:v]{overlayColours}[text]");
+                filters.Add($"[{picture}][text]overlay=x={x}:y={y}:eof_action=repeat,format=yuv420p[vtexted]");
+            }
+
+            picture = "vtexted";
+        }
+
         if (captions != null)
         {
-            var captionInput = inputCount;
+            var captionInput = inputCount++;
             args.AddRange(new[]
             {
                 "-f", "rawvideo",
@@ -104,9 +168,7 @@ public static class VerticalExporter
                 "-i", "pipe:0"
             });
 
-            // The captions are converted with the same colour matrix as the footage, so a yellow
-            // word is the same yellow in the file as on the canvas.
-            filters.Add($"[{captionInput}:v]scale=out_color_matrix={primary.Info.ColorMatrixArg}:out_range={primary.Info.ColorRangeArg},format=yuva420p[captions]");
+            filters.Add($"[{captionInput}:v]{overlayColours}[captions]");
             filters.Add($"[{picture}][captions]overlay=x={captions.X}:y={captions.Y}:eof_action=pass,format=yuv420p[vcaptioned]");
             picture = "vcaptioned";
         }
@@ -163,7 +225,7 @@ public static class VerticalExporter
             if (composition.GetSlot(placement.Slot) is { } clip && placement.Crop is { } crop)
             {
                 var tail = placements.Count == 1 ? ",format=yuv420p" : string.Empty;
-                filters.Add($"[{inputOfSlot[placement.Slot]}:V:0]{SquarePixels(clip.Info)}{Crop(clip.Info, crop)},scale={width}:{height}:flags=lanczos,setsar=1,fps={fps}{tail}[{label}]");
+                filters.Add($"[{inputOfSlot[placement.Slot]}:V:0]{ColourTags(clip.Info)}{SquarePixels(clip.Info)}{Motion(composition.Effects, clip.Info, fps, placement.Slot)}{Crop(clip.Info, crop)},scale={width}:{height}:flags=lanczos,setsar=1,fps={fps}{tail}[{label}]");
             }
             else
             {
@@ -193,7 +255,7 @@ public static class VerticalExporter
         var smallWidth = Even(canvasWidth / 4d);
         var smallHeight = Even(canvasHeight / 4d);
 
-        filters.Add($"[0:V:0]{SquarePixels(clip.Info)}fps={fps},split=2[bgsrc][fgsrc]");
+        filters.Add($"[0:V:0]{ColourTags(clip.Info)}{SquarePixels(clip.Info)}{Motion(composition.Effects, clip.Info, fps, 0)}fps={fps},split=2[bgsrc][fgsrc]");
         filters.Add($"[bgsrc]scale={smallWidth}:{smallHeight}:force_original_aspect_ratio=increase,crop={smallWidth}:{smallHeight},gblur=sigma=14,lutyuv=y=val*0.6,"
                     + $"scale={canvasWidth}:{canvasHeight}:flags=bilinear,setsar=1[bg]");
         filters.Add($"[fgsrc]{Crop(clip.Info, crop)},scale={width}:{height}:flags=lanczos,setsar=1[fg]");
@@ -224,7 +286,9 @@ public static class VerticalExporter
             return null;
 
         // first_pts=0 pads a late-starting audio track so sound stays in step with the picture.
-        const string resample = "aresample=48000:async=1:first_pts=0";
+        // A short that plays slower or faster has its sound stretched to match, at its own pitch.
+        var speed = composition.Effects.Speed;
+        var resample = "aresample=48000:async=1:first_pts=0" + (speed == 1 ? string.Empty : $",atempo={FfmpegTools.ArgNumber(speed)}");
 
         if (slots.Count == 1)
         {
@@ -236,6 +300,40 @@ public static class VerticalExporter
         filters.Add($"[{inputOfSlot[slots[1]]}:a:0]{resample}[a1]");
         filters.Add($"[a0][a1]amix=inputs=2:duration=longest:dropout_transition=0:normalize=0,alimiter=limit=0.97{finish}[aout]");
         return "[aout]";
+    }
+
+    /// <summary>
+    /// Names the colours of a clip whose file does not say what they are, the way players guess
+    /// them. Left unnamed, ffmpeg makes a guess of its own as soon as text or captions are laid
+    /// over the picture, and converts the whole picture to match them: the same short would
+    /// then have different colours with a title than without one. Nothing is converted here.
+    /// </summary>
+    private static string ColourTags(MediaInfo info)
+    {
+        var tags = new List<string>(2);
+
+        if (!info.HasColorMatrix)
+            tags.Add($"colorspace={info.ColorMatrixArg}");
+
+        if (!info.HasColorRange)
+            tags.Add($"range={info.ColorRangeArg}");
+
+        return tags.Count == 0 ? string.Empty : $"setparams={string.Join(':', tags)},";
+    }
+
+    /// <summary>
+    /// What changes a clip in time and in motion before it is framed: the speed of the short,
+    /// then its effect. The preview player runs the same two on its own frames.
+    /// </summary>
+    /// <param name="slot">Keeps the labels of one clip's effect apart from the other's.</param>
+    private static string Motion(ShortEffects effects, MediaInfo info, string fps, int slot)
+    {
+        var motion = effects.Speed == 1 ? string.Empty : $"setpts=PTS/{FfmpegTools.ArgNumber(effects.Speed)},";
+
+        if (effects.Effect.Filter is { } effect)
+            motion += EffectFilter.Resolve(effect, info.Width, info.Height, fps, slot.ToString(CultureInfo.InvariantCulture)) + ",";
+
+        return motion;
     }
 
     private static string SquarePixels(MediaInfo info)

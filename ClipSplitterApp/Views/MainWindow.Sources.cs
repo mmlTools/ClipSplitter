@@ -145,6 +145,16 @@ public partial class MainWindow
     {
         _activeSource = source;
 
+        // The clip preview belongs to the list that is showing, so it lets go of a clip from another video.
+        if (_clipItem != null && source?.Clips.Contains(_clipItem) != true)
+        {
+            _clipItem = null;
+            if (_mode == PreviewMode.Clip)
+                LoadClip(autoPlay: false);
+
+            UpdateClipPanel();
+        }
+
         _syncingUi = true;
         SourceList.SelectedItem = source;
         if (source != null)
@@ -395,9 +405,20 @@ public partial class MainWindow
 
     private void PreviewList_SelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
-        // While the clip preview is open, clicking a row shows that clip.
-        if (_ready && _mode == PreviewMode.Clip && PreviewList.SelectedItem is ClipPreviewItem item && item != _clipItem)
+        if (!_ready || PreviewList.SelectedItem is not ClipPreviewItem item || item == _clipItem)
+            return;
+
+        if (_mode == PreviewMode.Clip)
+        {
+            // While the clip preview is open, clicking a row shows that clip.
             ShowClip(item, autoPlay: false);
+        }
+        else
+        {
+            // Otherwise the row is remembered, so the clip preview opens on it.
+            _clipItem = item;
+            UpdateClipPanel();
+        }
     }
 
     private void PlayClip_Click(object? sender, RoutedEventArgs e)
@@ -424,13 +445,13 @@ public partial class MainWindow
     private void SendToTop_Click(object? sender, RoutedEventArgs e)
     {
         if (sender is Control { DataContext: ClipPreviewItem item })
-            AssignSlot(0, item.ToClipSource());
+            AssignClip(0, item);
     }
 
     private void SendToBottom_Click(object? sender, RoutedEventArgs e)
     {
         if (sender is Control { DataContext: ClipPreviewItem item })
-            AssignSlot(1, item.ToClipSource());
+            AssignClip(1, item);
     }
 
     // ---------------------------------------------------------------- OBS Studio replays

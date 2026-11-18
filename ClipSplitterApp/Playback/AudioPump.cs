@@ -40,18 +40,21 @@ internal sealed class AudioPump : IDisposable
         {
             args.AddRange(new[]
             {
-                "-ss", FfmpegTools.ArgTime(source.Start + offset),
-                "-t", FfmpegTools.ArgTime(length),
+                "-ss", FfmpegTools.ArgTime(source.SourceTime(offset)),
+                "-t", FfmpegTools.ArgTime(length * source.Speed),
                 "-vn", "-sn", "-dn",
                 "-i", source.File
             });
         }
 
-        // first_pts=0 pads a late-starting audio track with silence so it stays aligned with the picture.
-        const string resample = "aresample=48000:async=1:first_pts=0";
+        // first_pts=0 pads a late-starting audio track with silence so it stays aligned with the
+        // picture. A clip that plays slower or faster has its sound stretched to match, at its own pitch.
+        static string Prepare(PlaybackLayer source)
+            => "aresample=48000:async=1:first_pts=0" + (source.Speed == 1 ? string.Empty : $",atempo={FfmpegTools.ArgNumber(source.Speed)}");
+
         var graph = sources.Count == 1
-            ? $"[0:a:0]{resample}[aout]"
-            : $"[0:a:0]{resample}[a0];[1:a:0]{resample}[a1];[a0][a1]amix=inputs=2:duration=longest:dropout_transition=0:normalize=0,alimiter=limit=0.97[aout]";
+            ? $"[0:a:0]{Prepare(sources[0])}[aout]"
+            : $"[0:a:0]{Prepare(sources[0])}[a0];[1:a:0]{Prepare(sources[1])}[a1];[a0][a1]amix=inputs=2:duration=longest:dropout_transition=0:normalize=0,alimiter=limit=0.97[aout]";
 
         args.AddRange(new[] { "-filter_complex", graph, "-map", "[aout]", "-ac", "2", "-ar", "48000", "-f", "s16le", "pipe:1" });
 

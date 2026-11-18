@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using ClipSplitterApp.Captions;
+using ClipSplitterApp.TextOverlays;
 
 namespace ClipSplitterApp.Services;
 
@@ -65,7 +66,7 @@ public readonly record struct RectD(double X, double Y, double Width, double Hei
 /// <summary>Where a slot sits on the canvas and which part of its clip it shows.</summary>
 public sealed record SlotPlacement(int Slot, RectD Dest, RectD? Crop);
 
-/// <summary>A short: up to two clips arranged on a canvas of the chosen format, with optional captions.</summary>
+/// <summary>A short: up to two clips arranged on a canvas of the chosen format, with optional text and captions.</summary>
 public sealed class VerticalComposition
 {
     public const double MinSplitRatio = 0.25;
@@ -85,6 +86,9 @@ public sealed class VerticalComposition
 
     /// <summary>How captions look and where they sit. The words themselves belong to the clip being captioned.</summary>
     public CaptionSettings Captions { get; private set; } = new();
+
+    /// <summary>The text written over the short, such as a title or a hook, with its look and its place.</summary>
+    public TextOverlaySettings Text { get; private set; } = new();
 
     /// <summary>The colour look of the short, and how it fades in and out.</summary>
     public ShortEffects Effects { get; private set; } = new();
@@ -138,8 +142,11 @@ public sealed class VerticalComposition
         }
     }
 
-    /// <summary>The short ends when its shortest clip does.</summary>
-    public TimeSpan Duration
+    /// <summary>How long the short plays: the stretch of its clips that is used, at the speed chosen for it.</summary>
+    public TimeSpan Duration => SourceDuration / Effects.Speed;
+
+    /// <summary>The stretch of each clip that goes into the short. The short ends when its shortest clip does.</summary>
+    public TimeSpan SourceDuration
     {
         get
         {
@@ -206,6 +213,13 @@ public sealed class VerticalComposition
     public double? CaptionMiddle => Layout == VerticalLayoutKind.Stacked ? TopHeight : null;
 
     /// <summary>
+    /// The text of the short laid out for its frame, or null when nothing is written. The live
+    /// preview and the exporter both draw from this, so they always agree. A text placed in the
+    /// middle sits on the same line as captions placed there.
+    /// </summary>
+    public TextOverlayScene? LayOutText() => TextOverlayLayout.Build(Text, CanvasWidth, CanvasHeight, CaptionMiddle);
+
+    /// <summary>
     /// The furthest a slot can usefully be zoomed. In the blur layout zooming stops once the clip
     /// covers the whole canvas, because past that point it is just the fill layout.
     /// </summary>
@@ -239,6 +253,7 @@ public sealed class VerticalComposition
             SplitRatio = SplitRatio,
             Audio = Audio,
             Captions = Captions.Clone(),
+            Text = Text.Clone(),
             Effects = Effects.Clone()
         };
 
